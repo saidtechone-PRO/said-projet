@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#fff"/>
+      <stop offset="1" stop-color="#e8f1f4"/>
+    </linearGradient>
+    <linearGradient id="pulse" x1="0" y1="0" x2="1" y2="0">
+      <stop stop-color="#17344e"/>
+      <stop offset=".7" stop-color="#137b83"/>
+      <stop offset="1" stop-color="#21b7a6"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="15" fill="url(#tile)"/>
+  <path d="M8 25h8l4-8 5 15 5-11 3 4h7" fill="none" stroke="url(#pulse)" stroke-linecap="round" stroke-linejoin="round" stroke-width="4"/>
+  <path d="M36 7v10m-5-5h10" fill="none" stroke="#20b5a7" stroke-linecap="round" stroke-width="3"/>
+</svg>
