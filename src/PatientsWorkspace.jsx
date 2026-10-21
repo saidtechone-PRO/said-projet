@@ -1098,11 +1098,24 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                 ) : (
                   <div className="doctor-patient-list">
                     {patients.slice(0, 6).map((patient) => (
-                      <article className="doctor-patient-row" key={patient.id}>
+                      <article
+                        className="doctor-patient-row"
+                        key={patient.id}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Ouvrir le dossier de ${patient.full_name}`}
+                        onClick={() => setSelectedPatientId(patient.id)}
+                        onKeyDown={(event) => {
+                          if (event.target !== event.currentTarget) return;
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedPatientId(patient.id);
+                          }
+                        }}
+                      >
                         <span className="patients-avatar">{patient.full_name.trim().charAt(0).toUpperCase()}</span>
                         <div><strong>{patient.full_name}</strong><span>{patient.age == null ? "Âge non renseigné" : `${patient.age} ans`} · {patient.city || "Ville non renseignée"}</span></div>
-                        <button type="button" onClick={() => setSelectedPatientId(patient.id)}>Dossier</button>
-                        <button type="button" aria-label={`Nouvelle consultation pour ${patient.full_name}`} onClick={() => openClinicalNoteForm(patient.id)}><Plus size={15} /></button>
+                        <button type="button" aria-label={`Nouvelle consultation pour ${patient.full_name}`} onClick={(event) => { event.stopPropagation(); openClinicalNoteForm(patient.id); }}><Plus size={15} /></button>
                       </article>
                     ))}
                   </div>
