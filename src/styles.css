@@ -672,7 +672,7 @@ h1, h2, h3, p { margin-top: 0; }
 .patients-directory-row { display: grid; grid-template-columns: 34px minmax(140px,.85fr) minmax(0,1.4fr) auto; align-items: center; gap: 12px; padding: 10px; border: 1px solid transparent; border-top-color: rgba(196,211,235,.08); border-radius: 10px; cursor: pointer; transition: border-color .18s ease,background .18s ease,box-shadow .18s ease; }
 .patients-directory-row:hover, .patients-directory-row:focus-within { border-color: rgba(109,224,207,.42); background: rgba(79,202,185,.055); box-shadow: 0 0 0 2px rgba(79,202,185,.06); }
 .patients-directory-identity, .patients-directory-details { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
-.patients-directory-identity .patient-name-link { overflow: hidden; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.patients-directory-identity .patient-name { overflow: hidden; font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .patients-directory-identity > span, .patients-directory-details small { color: #93a1b1; font-size: 9px; }
 .patients-directory-details { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
 .patients-directory-details > span { display: flex; min-width: 0; flex-direction: column; gap: 3px; overflow: hidden; color: #bfc8d4; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
@@ -1476,8 +1476,6 @@ h1, h2, h3, p { margin-top: 0; }
   .ambient-motion { display: none; }
 }
 
-.patient-name-link { padding: 0; border: 0; color: #f1f3ed; background: transparent; cursor: pointer; font: inherit; text-align: left; }
-.patient-name-link:hover { color: #91e0d2; text-decoration: underline; text-underline-offset: 3px; }
 .patient-record-card { width: min(100%,760px); }
 .patient-record-heading { display: flex; align-items: center; gap: 14px; margin: 20px 0; }
 .patient-record-heading .patients-avatar { width: 48px; height: 48px; flex-basis: 48px; border-radius: 14px; font-size: 17px; }

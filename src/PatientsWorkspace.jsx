@@ -1030,7 +1030,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                     <article className="patients-directory-row" key={patient.id} onClick={() => setSelectedPatientId(patient.id)}>
                       <span className="patients-avatar" aria-hidden="true">{patient.full_name.trim().charAt(0).toUpperCase()}</span>
                       <div className="patients-directory-identity">
-                        <button className="patient-name-link" type="button" onClick={() => setSelectedPatientId(patient.id)} aria-label={`Ouvrir la fiche de ${patient.full_name}`}>{patient.full_name}</button>
+                        <span className="patient-name">{patient.full_name}</span>
                         <span>{patient.age == null ? "Âge non renseigné" : `${patient.age} ans`}</span>
                       </div>
                       <div className="patients-directory-details">
