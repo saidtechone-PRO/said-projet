@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Activity,
   ArrowDown,
@@ -17,6 +17,7 @@ import {
   Hospital,
   LayoutDashboard,
   LockKeyhole,
+  Mail,
   Menu,
   Package,
   Plus,
@@ -30,6 +31,7 @@ import {
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { requireSupabase, supabase } from "./lib/supabase";
+import PatientsWorkspace from "./PatientsWorkspace";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -146,6 +148,8 @@ const facilityTypes = [
   { name: "Autre établissement de santé", description: "Centre spécialisé ou autre structure", icon: HeartPulse },
 ];
 
+const signupRedirectUrl = () => `${window.location.origin}/?signup=confirmed`;
+
 function FacilitySelect({ value, onChange, error }) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -259,17 +263,6 @@ function FacilitySelect({ value, onChange, error }) {
   );
 }
 
-function GoogleMark() {
-  return (
-    <svg viewBox="0 0 48 48" aria-hidden="true">
-      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.76 7.18l7.73 6C44.42 37.96 47 31.94 47 24.55Z" />
-      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.8l-7.73-6c-2.14 1.44-4.89 2.3-8.17 2.3-6.26 0-11.57-4.22-13.46-9.91l-7.98 6.2C6.51 42.62 14.62 48 24 48Z" />
-      <path fill="#FBBC05" d="M10.54 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.13.76-4.59l-7.98-6.2A23.9 23.9 0 0 0 0 24c0 3.88.93 7.55 2.56 10.78l7.98-6.19Z" />
-      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z" />
-    </svg>
-  );
-}
-
 async function saveEstablishmentProfile(userId, fullNameValue, establishment) {
   const { error } = await requireSupabase().from("establishments").upsert({
     user_id: userId,
@@ -284,9 +277,8 @@ async function saveEstablishmentProfile(userId, fullNameValue, establishment) {
   if (error) throw error;
 }
 
-function SignupModal({ open, onClose, mode, onModeChange, oauthUser, oauthIntent, onGoogleAuth }) {
+function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, onSignupConfirmationHandled }) {
   const [submitted, setSubmitted] = useState(false);
-  const [googleNotice, setGoogleNotice] = useState("");
   const [facility, setFacility] = useState("");
   const [facilityError, setFacilityError] = useState("");
   const [signupStep, setSignupStep] = useState("identity");
@@ -297,10 +289,8 @@ function SignupModal({ open, onClose, mode, onModeChange, oauthUser, oauthIntent
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [verificationCode, setVerificationCode] = useState("");
   const [establishment, setEstablishment] = useState(null);
-  const [signupProvider, setSignupProvider] = useState("email");
-  const [verifiedUser, setVerifiedUser] = useState(null);
+  const [signupUser, setSignupUser] = useState(null);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -318,7 +308,6 @@ function SignupModal({ open, onClose, mode, onModeChange, oauthUser, oauthIntent
   useEffect(() => {
     if (!open) {
       setSubmitted(false);
-      setGoogleNotice("");
       setFacility("");
       setFacilityError("");
       setSignupStep("identity");
@@ -329,24 +318,20 @@ function SignupModal({ open, onClose, mode, onModeChange, oauthUser, oauthIntent
       setFullName("");
       setEmail("");
       setPassword("");
-      setVerificationCode("");
       setEstablishment(null);
-      setSignupProvider("email");
-      setVerifiedUser(null);
+      setSignupUser(null);
     }
   }, [open]);
 
   useEffect(() => {
-    if (!open || !oauthUser) return;
-    if (oauthIntent === "signup" && mode === "signup") {
-      setFullName(oauthUser.user_metadata?.full_name ?? oauthUser.user_metadata?.name ?? "");
-      setEmail(oauthUser.email ?? "");
-      setSignupProvider("google");
-      setSignupStep("establishment");
-    } else if (oauthIntent === "login" && mode === "login") {
-      setSubmitted(true);
-    }
-  }, [open, oauthUser, oauthIntent, mode]);
+    if (!open || !confirmedSignupUser) return;
+    setFullName(confirmedSignupUser.user_metadata?.full_name ?? "");
+    setEmail(confirmedSignupUser.email ?? "");
+    setSignupUser(confirmedSignupUser);
+    setSignupStep("establishment");
+    setSignupError("");
+    onSignupConfirmationHandled();
+  }, [open, confirmedSignupUser, onSignupConfirmationHandled]);
 
   const submitSignupStep = async (event) => {
     event.preventDefault();
@@ -357,12 +342,20 @@ function SignupModal({ open, onClose, mode, onModeChange, oauthUser, oauthIntent
         const { data, error } = await requireSupabase().auth.signUp({
           email: email.trim().toLowerCase(),
           password,
-          options: { data: { full_name: fullName.trim() } },
+          options: {
+            data: { full_name: fullName.trim() },
+            emailRedirectTo: signupRedirectUrl(),
+          },
         });
         if (error) throw error;
         if (!data.user) throw new Error("Supabase n’a pas créé votre demande d’inscription. Réessayez.");
         setEmail(data.user.email ?? email);
-        setSignupStep("establishment");
+        if (data.session) {
+          setSignupUser(data.user);
+          setSignupStep("establishment");
+        } else {
+          setSignupStep("confirmation");
+        }
       } else if (signupStep === "establishment") {
         if (!facility) {
           setFacilityError("Sélectionnez le type de votre établissement pour continuer.");
@@ -378,27 +371,8 @@ function SignupModal({ open, onClose, mode, onModeChange, oauthUser, oauthIntent
           teamSize: String(form.get("teamSize") ?? ""),
         };
         setEstablishment(establishmentDetails);
-        if (signupProvider === "google") {
-          if (!oauthUser) throw new Error("Votre session Google a expiré. Recommencez l’inscription.");
-          await saveEstablishmentProfile(oauthUser.id, fullName, establishmentDetails);
-          setSubmitted(true);
-        } else {
-          setSignupStep("verification");
-        }
-      } else {
-        let user = verifiedUser;
-        if (!user) {
-          const { data, error } = await requireSupabase().auth.verifyOtp({
-            email,
-            token: verificationCode,
-            type: "signup",
-          });
-          if (error) throw error;
-          if (!data.user) throw new Error("L’adresse e-mail n’a pas pu être vérifiée. Demandez un nouveau code.");
-          user = data.user;
-          setVerifiedUser(user);
-        }
-        await saveEstablishmentProfile(user.id, user.user_metadata?.full_name ?? fullName, establishment);
+        if (!signupUser) throw new Error("Confirmez d’abord votre adresse e-mail depuis le lien reçu.");
+        await saveEstablishmentProfile(signupUser.id, signupUser.user_metadata?.full_name ?? fullName, establishmentDetails);
         setSubmitted(true);
       }
     } catch (error) {
@@ -408,15 +382,18 @@ function SignupModal({ open, onClose, mode, onModeChange, oauthUser, oauthIntent
     }
   };
 
-  const resendVerificationCode = async () => {
+  const resendConfirmationLink = async () => {
     setResendNotice("");
     setSignupError("");
     setIsResending(true);
     try {
-      const { error } = await requireSupabase().auth.resend({ type: "signup", email });
+      const { error } = await requireSupabase().auth.resend({
+        type: "signup",
+        email,
+        options: { emailRedirectTo: signupRedirectUrl() },
+      });
       if (error) throw error;
-      setVerificationCode("");
-      setResendNotice(`Un nouveau code a été envoyé à ${email}.`);
+      setResendNotice(`Un nouveau lien de confirmation a été envoyé à ${email}.`);
     } catch (error) {
       setSignupError(error.message);
     } finally {
@@ -482,146 +459,112 @@ function SignupModal({ open, onClose, mode, onModeChange, oauthUser, oauthIntent
                   <p className="form-note"><LockKeyhole size={13} /> Vos informations restent confidentielles.</p>
                 </form>
                 <button className="auth-switch" type="button" onClick={() => onModeChange("signup")}>Pas encore de compte ? S’inscrire</button>
-                <div className="auth-divider"><span>OU CONTINUER AVEC</span></div>
-                <button className="google-auth-button" type="button" disabled={isSubmitting} onClick={async () => {
-                  setGoogleNotice("");
-                  setIsSubmitting(true);
-                  try {
-                    await onGoogleAuth("login");
-                  } catch (error) {
-                    setGoogleNotice(error.message);
-                    setIsSubmitting(false);
-                  }
-                }}>
-                  <GoogleMark /> Se connecter avec Google
-                </button>
-                {googleNotice && <p className="google-auth-notice" role="alert">{googleNotice}</p>}
               </>
             ) : (
               <>
                 <span className="eyebrow">VOTRE ÉTABLISSEMENT, MIEUX ORGANISÉ</span>
                 <div className="signup-progress" aria-label={`Étape ${
-                  signupStep === "identity" ? "1" : signupStep === "establishment" ? "2" : "3"
-                } sur ${signupProvider === "google" ? "2" : "3"}`}>
-                  {(signupProvider === "google" ? ["identity", "establishment"] : ["identity", "establishment", "verification"]).map((step, index) => (
+                  signupStep === "identity" ? "1" : signupStep === "confirmation" ? "2" : "3"
+                } sur 3`}>
+                  {["identity", "confirmation", "establishment"].map((step, index) => (
                     <span
                       key={step}
-                      className={["identity", "establishment", "verification"].indexOf(signupStep) >= index
+                      className={["identity", "confirmation", "establishment"].indexOf(signupStep) >= index
                         ? "signup-progress__step signup-progress__step--complete"
                         : "signup-progress__step"}
                     />
                   ))}
                 </div>
                 <h2 id="signup-title">
-                  {signupStep === "identity" ? "Créer votre compte." : signupStep === "establishment" ? "Votre établissement." : "Vérifier votre Gmail."}
+                  {signupStep === "identity" ? "Créer votre compte." : signupStep === "confirmation" ? "Confirmez votre adresse." : "Votre établissement."}
                 </h2>
                 <p className="modal-intro">
                   {signupStep === "identity"
                     ? "Commencez avec votre nom, votre adresse Gmail et un mot de passe sécurisé."
-                    : signupStep === "establishment"
-                      ? signupProvider === "google"
-                        ? `Adresse Gmail confirmée par Google : ${email}. Complétez les informations de votre établissement.`
-                        : `Nous avons envoyé un code à ${email}. Renseignez les informations de votre établissement avant de le vérifier.`
-                      : `Saisissez le code à 6 chiffres envoyé à ${email} pour confirmer votre inscription.`}
+                    : signupStep === "confirmation"
+                      ? `Un lien de confirmation a été envoyé à ${email}. Cliquez dessus depuis votre boîte mail pour poursuivre votre inscription.`
+                      : `Adresse confirmée : ${email}. Complétez les informations de votre établissement pour terminer l’inscription.`}
                 </p>
-                <form className="signup-form" key={`${mode}-${signupStep}`} onSubmit={submitSignupStep}>
-                  {signupStep === "identity" ? (
-                    <>
-                      <label>
-                        Nom complet
-                        <input autoComplete="name" name="name" placeholder="Ex. Aïssatou Bah" value={fullName} onChange={(event) => setFullName(event.target.value)} minLength={2} maxLength={100} required />
-                      </label>
-                      <label>
-                        Adresse Gmail
-                        <input autoComplete="email" name="email" placeholder="vous@gmail.com" type="email" pattern="[^@ ]+@(gmail[.]com|googlemail[.]com)" title="Utilisez une adresse se terminant par @gmail.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
-                      </label>
-                      <label>
-                        Mot de passe
-                        <input autoComplete="new-password" name="password" placeholder="10 caractères minimum" type="password" minLength={10} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} required />
-                      </label>
-                      <p className="form-note"><LockKeyhole size={13} /> Votre adresse doit être vérifiée avant la création du compte.</p>
-                    </>
-                  ) : signupStep === "establishment" ? (
-                    <>
-                      <label>Nom de l’établissement<input autoComplete="organization" name="facilityName" placeholder="Ex. Clinique de la Concorde" maxLength={150} required /></label>
-                      <div className="signup-field">
-                        <span>Type d’établissement</span>
-                        <FacilitySelect value={facility} onChange={(value) => { setFacility(value); setFacilityError(""); }} error={facilityError} />
-                      </div>
-                      <div className="signup-form__row">
-                        <label>Ville<input autoComplete="address-level2" name="city" placeholder="Ex. Conakry" maxLength={100} required /></label>
-                        <label>Pays<input autoComplete="country-name" name="country" defaultValue="Guinée" maxLength={100} required /></label>
-                      </div>
-                      <div className="signup-form__row">
-                        <label>Téléphone<input autoComplete="tel" name="phone" type="tel" placeholder="+224 6XX XX XX XX" maxLength={40} required /></label>
-                        <label>Taille de l’équipe
-                          <select name="teamSize" defaultValue="" required>
-                            <option value="" disabled>Sélectionner</option>
-                            <option value="1-5">1 à 5 personnes</option>
-                            <option value="6-20">6 à 20 personnes</option>
-                            <option value="21-50">21 à 50 personnes</option>
-                            <option value="51+">Plus de 50 personnes</option>
-                          </select>
-                        </label>
-                      </div>
-                    </>
-                  ) : (
-                    <label className="verification-code-field">
-                      Code de vérification
-                      <input autoComplete="one-time-code" inputMode="numeric" name="verificationCode" placeholder="000000" pattern="[0-9]{6}" maxLength={6} value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6))} required />
-                    </label>
-                  )}
-                  {signupError && <p className="signup-error" role="alert">{signupError}</p>}
-                  <button className="button button--primary signup-submit" type="submit" disabled={isSubmitting}>
-                    {isSubmitting
-                      ? "Veuillez patienter…"
-                      : signupStep === "identity"
-                        ? "Envoyer le code"
-                        : signupStep === "establishment"
-                          ? signupProvider === "google" ? "Créer mon compte" : "Continuer vers la vérification"
-                          : "Vérifier et créer mon compte"}
-                    {!isSubmitting && <ArrowRight size={16} />}
-                  </button>
-                  <p className="form-note"><LockKeyhole size={13} /> Vos informations restent confidentielles.</p>
-                </form>
-                {signupStep === "verification" && (
-                  <>
-                    <button className="auth-switch" type="button" disabled={isResending || isSubmitting} onClick={resendVerificationCode}>
-                      {isResending ? "Envoi du code…" : "Renvoyer le code"}
+                {signupStep === "confirmation" ? (
+                  <div className="signup-confirmation">
+                    <span className="signup-confirmation__icon"><Mail size={24} /></span>
+                    <p>Ouvrez l’e-mail de Clinic DC et cliquez sur le lien de confirmation. Vous reviendrez ensuite ici pour terminer votre inscription.</p>
+                    {signupError && <p className="signup-error" role="alert">{signupError}</p>}
+                    <button className="button button--primary signup-submit" type="button" disabled={isResending} onClick={resendConfirmationLink}>
+                      {isResending ? "Envoi du lien…" : "Renvoyer le lien"}
                     </button>
-                    {resendNotice && <p className="google-auth-notice" role="status">{resendNotice}</p>}
-                  </>
+                    {resendNotice && <p className="auth-status-notice" role="status">{resendNotice}</p>}
+                    <button className="auth-switch" type="button" onClick={() => { setSignupError(""); setSignupStep("identity"); }}>
+                      Modifier mes coordonnées
+                    </button>
+                  </div>
+                ) : (
+                  <form className="signup-form" key={`${mode}-${signupStep}`} onSubmit={submitSignupStep}>
+                    {signupStep === "identity" ? (
+                      <>
+                        <label>
+                          Nom complet
+                          <input autoComplete="name" name="name" placeholder="Ex. Aïssatou Bah" value={fullName} onChange={(event) => setFullName(event.target.value)} minLength={2} maxLength={100} required />
+                        </label>
+                        <label>
+                          Adresse Gmail
+                          <input autoComplete="email" name="email" placeholder="vous@gmail.com" type="email" pattern="[^@ ]+@(gmail[.]com|googlemail[.]com)" title="Utilisez une adresse se terminant par @gmail.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
+                        </label>
+                        <label>
+                          Mot de passe
+                          <input autoComplete="new-password" name="password" placeholder="10 caractères minimum" type="password" minLength={10} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} required />
+                        </label>
+                        <p className="form-note"><LockKeyhole size={13} /> Votre adresse doit être confirmée avant l’activation du compte.</p>
+                      </>
+                    ) : (
+                      <>
+                        <label>Nom de l’établissement<input autoComplete="organization" name="facilityName" placeholder="Ex. Clinique de la Concorde" maxLength={150} required /></label>
+                        <div className="signup-field">
+                          <span>Type d’établissement</span>
+                          <FacilitySelect value={facility} onChange={(value) => { setFacility(value); setFacilityError(""); }} error={facilityError} />
+                        </div>
+                        <div className="signup-form__row">
+                          <label>Ville<input autoComplete="address-level2" name="city" placeholder="Ex. Conakry" maxLength={100} required /></label>
+                          <label>Pays<input autoComplete="country-name" name="country" defaultValue="Guinée" maxLength={100} required /></label>
+                        </div>
+                        <div className="signup-form__row">
+                          <label>Téléphone<input autoComplete="tel" name="phone" type="tel" placeholder="+224 6XX XX XX XX" maxLength={40} required /></label>
+                          <label>Taille de l’équipe
+                            <select name="teamSize" defaultValue="" required>
+                              <option value="" disabled>Sélectionner</option>
+                              <option value="1-5">1 à 5 personnes</option>
+                              <option value="6-20">6 à 20 personnes</option>
+                              <option value="21-50">21 à 50 personnes</option>
+                              <option value="51+">Plus de 50 personnes</option>
+                            </select>
+                          </label>
+                        </div>
+                      </>
+                    )}
+                    {signupError && <p className="signup-error" role="alert">{signupError}</p>}
+                    <button className="button button--primary signup-submit" type="submit" disabled={isSubmitting}>
+                      {isSubmitting
+                        ? "Veuillez patienter…"
+                        : signupStep === "identity" ? "Envoyer le lien" : "Créer mon compte"}
+                      {!isSubmitting && <ArrowRight size={16} />}
+                    </button>
+                    <p className="form-note"><LockKeyhole size={13} /> Vos informations restent confidentielles.</p>
+                  </form>
                 )}
                 {signupStep === "identity" ? (
-                  <>
-                    <button className="auth-switch" type="button" onClick={() => { setGoogleNotice(""); onModeChange("login"); }}>Déjà un compte ? Se connecter</button>
-                    <div className="auth-divider"><span>OU CONTINUER AVEC</span></div>
-                    <button className="google-auth-button" type="button" disabled={isSubmitting} onClick={async () => {
-                      setGoogleNotice("");
-                      setIsSubmitting(true);
-                      try {
-                        await onGoogleAuth("signup");
-                      } catch (error) {
-                        setGoogleNotice(error.message);
-                        setIsSubmitting(false);
-                      }
-                    }}>
-                      <GoogleMark /> S’inscrire avec Google
-                    </button>
-                    {googleNotice && <p className="google-auth-notice" role="alert">{googleNotice}</p>}
-                  </>
-                ) : (
+                  <button className="auth-switch" type="button" onClick={() => onModeChange("login")}>Déjà un compte ? Se connecter</button>
+                ) : signupStep === "establishment" ? (
                   <button
                     className="auth-switch"
                     type="button"
                     onClick={() => {
                       setSignupError("");
-                      setSignupStep(signupStep === "verification" ? "establishment" : "identity");
+                      setSignupStep("identity");
                     }}
                   >
-                    ← {signupStep === "verification" ? "Modifier les informations" : "Modifier mes coordonnées"}
+                    ← Modifier mes coordonnées
                   </button>
-                )}
+                ) : null}
               </>
             )}
           </>
@@ -788,30 +731,38 @@ function App() {
   const rootRef = useRef(null);
   const [signupOpen, setSignupOpen] = useState(false);
   const [authMode, setAuthMode] = useState("signup");
-  const [oauthUser, setOauthUser] = useState(null);
-  const [oauthIntent, setOauthIntent] = useState("");
+  const [confirmedSignupUser, setConfirmedSignupUser] = useState(null);
+  const [authenticatedUser, setAuthenticatedUser] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [contactSubmitted, setContactSubmitted] = useState(false);
+  const isDashboardPreview = new URLSearchParams(window.location.search).get("preview") === "dashboard";
+
+  const clearConfirmedSignup = useCallback(() => setConfirmedSignupUser(null), []);
 
   useEffect(() => {
     if (!supabase) return undefined;
-    const applyOAuthReturn = (session) => {
-      const intent = window.localStorage.getItem("clinicdc-auth-intent");
-      if (!session?.user || !intent) return;
-      window.localStorage.removeItem("clinicdc-auth-intent");
-      setOauthUser(session.user);
-      setOauthIntent(intent);
-      setAuthMode(intent === "login" ? "login" : "signup");
+    const completeConfirmedSignup = (session) => {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("signup") !== "confirmed" || !session?.user) return;
+
+      url.searchParams.delete("signup");
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+      setConfirmedSignupUser(session.user);
+      setAuthMode("signup");
       setSignupOpen(true);
     };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => applyOAuthReturn(session));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthenticatedUser(session?.user ?? null);
+      completeConfirmedSignup(session);
+    });
     supabase.auth.getSession().then(({ data, error }) => {
       if (error) {
         console.error("Unable to restore Supabase session:", error.message);
         return;
       }
-      applyOAuthReturn(data.session);
+      setAuthenticatedUser(data.session?.user ?? null);
+      completeConfirmedSignup(data.session);
     });
     return () => subscription.unsubscribe();
   }, []);
@@ -932,18 +883,24 @@ function App() {
     setAuthMode("login");
     setSignupOpen(true);
   };
-  const startGoogleAuth = async (intent) => {
-    const client = requireSupabase();
-    window.localStorage.setItem("clinicdc-auth-intent", intent);
-    const { error } = await client.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin },
-    });
-    if (error) {
-      window.localStorage.removeItem("clinicdc-auth-intent");
-      throw error;
-    }
+  const signOut = async () => {
+    const { error } = await requireSupabase().auth.signOut();
+    if (error) throw error;
   };
+
+  if (isDashboardPreview) {
+    return (
+      <PatientsWorkspace
+        user={{ email: "admin@clinicdc.test", user_metadata: { full_name: "Administrateur Clinic DC (démo)" } }}
+        isDemo
+        onSignOut={() => window.location.assign(window.location.pathname)}
+      />
+    );
+  }
+
+  if (authenticatedUser && !signupOpen) {
+    return <PatientsWorkspace user={authenticatedUser} onSignOut={signOut} />;
+  }
 
   return (
     <main ref={rootRef} data-theme="clinic-care">
@@ -963,6 +920,7 @@ function App() {
           <a href="#fonctionnalites" onClick={closeMenu}>Fonctions</a>
           <a href="#parcours" onClick={closeMenu}>Parcours</a>
           <a href="#tarifs" onClick={closeMenu}>Tarifs</a>
+          <a href="?preview=dashboard" onClick={closeMenu}>Démo admin</a>
           <a className="login-link login-link--nav" href="#connexion" onClick={(event) => { event.preventDefault(); openLogin(); }}>Connexion</a>
           <button className="mobile-signup" onClick={openSignup}>S’inscrire <ArrowRight size={15} /></button>
         </nav>
@@ -982,6 +940,7 @@ function App() {
           <p className="hero-description">Dossiers patients, rendez-vous, laboratoire, pharmacie et caisse — un seul outil pour toute votre équipe médicale.</p>
           <div className="hero-actions">
             <button className="button button--primary button--hero" onClick={openSignup}>S’inscrire <ArrowRight size={17} /></button>
+            <a className="text-link" href="?preview=dashboard">Tester la démo admin <ArrowRight size={14} /></a>
             <a className="text-link" href="#tarifs">Voir les tarifs</a>
           </div>
         </div>
@@ -1149,7 +1108,7 @@ function App() {
         <div className="creator-signature">
           <div className="creator-signature__copy">
             <p className="creator-signature__byline">Conçu et façonné par <b>Saidou DOUMBOUYA</b> · Ingénieur architecte</p>
-            <p className="creator-signature__contact"><a href="mailto:saidisalone@gmail.com">saidisalone@gmail.com</a><span>·</span><a href="tel:+224614833310">+224 614 83 33 10</a></p>
+            <p className="creator-signature__contact"><a href="mailto:clinicdc224@gmail.com">clinicdc224@gmail.com</a><span>·</span><a href="tel:+224614833310">+224 614 83 33 10</a></p>
           </div>
         </div>
       </footer>
@@ -1159,9 +1118,8 @@ function App() {
         onClose={() => setSignupOpen(false)}
         mode={authMode}
         onModeChange={setAuthMode}
-        oauthUser={oauthUser}
-        oauthIntent={oauthIntent}
-        onGoogleAuth={startGoogleAuth}
+        confirmedSignupUser={confirmedSignupUser}
+        onSignupConfirmationHandled={clearConfirmedSignup}
       />
     </main>
   );
