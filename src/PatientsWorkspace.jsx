@@ -51,6 +51,20 @@ function formatAmount(amount) {
   return new Intl.NumberFormat("fr-GN", { maximumFractionDigits: 0 }).format(amount);
 }
 
+function getPaymentStatusLabel(status, insuranceName = "") {
+  if (status === "partial") return "Paiement partiel";
+  if (status === "insurance_pending") return `Reste à payer par ${insuranceName || "l’assurance"}`;
+  return "Payé";
+}
+
+function getExpectedPatientPayment(totalAmount, patient) {
+  if (!Number.isSafeInteger(totalAmount) || totalAmount <= 0) return "";
+  if (!patient?.insured) return String(totalAmount);
+  const percentage = Number(patient.insurance_percentage ?? 0);
+  if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) return "";
+  return String(totalAmount - Math.round(totalAmount * percentage / 100));
+}
+
 function getGuineaNationalNumber(contact = "") {
   return contact.replace(/^\s*\+?224\s*/, "");
 }
@@ -1123,8 +1137,13 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
       return;
     }
     const amount = Number(paymentForm.amount);
-    if (!Number.isSafeInteger(amount) || amount <= 0 || amount > totalAmount) {
-      setPaymentError("Le montant encaissé doit être un montant entier positif qui ne dépasse pas le tarif total.");
+    const expectedPatientPayment = Number(getExpectedPatientPayment(totalAmount, patient));
+    if (!Number.isSafeInteger(amount) || amount < 0 || amount > totalAmount) {
+      setPaymentError("Le montant encaissé doit être un montant entier positif ou nul qui ne dépasse pas le tarif total.");
+      return;
+    }
+    if (expectedPatientPayment > 0 && amount === 0) {
+      setPaymentError("Saisissez le montant encaissé auprès du patient.");
       return;
     }
     const insurancePercentage = patient.insured ? Number(patient.insurance_percentage ?? 0) : 0;
@@ -1132,13 +1151,25 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
       setPaymentError("Complétez le nom et le taux de l’assurance dans la fiche du patient avant d’enregistrer ce paiement.");
       return;
     }
-    if (paymentForm.status === "paid" && amount !== totalAmount) {
-      setPaymentError("Pour un règlement marqué payé, le montant encaissé doit correspondre au tarif total.");
+    if (paymentForm.status === "paid" && amount !== expectedPatientPayment) {
+      setPaymentError("Pour un règlement marqué payé, le montant encaissé doit correspondre au reste à charge du patient.");
       return;
     }
-    if (paymentForm.status === "partial" && amount >= totalAmount) {
-      setPaymentError("Sélectionnez « Payé » lorsque le tarif total a été encaissé.");
+    if (paymentForm.status === "partial" && amount >= expectedPatientPayment) {
+      setPaymentError(patient.insured && paymentInsuranceCoveredAmount > 0
+        ? "Sélectionnez le statut de prise en charge par l’assurance lorsque le reste à charge du patient a été encaissé."
+        : "Sélectionnez « Payé » lorsque le reste à charge du patient a été encaissé.");
       return;
+    }
+    if (paymentForm.status === "insurance_pending") {
+      if (!patient.insured || paymentInsuranceCoveredAmount <= 0) {
+        setPaymentError("Ce statut nécessite un patient assuré avec une part prise en charge par son assurance.");
+        return;
+      }
+      if (amount !== expectedPatientPayment) {
+        setPaymentError("Pour ce statut, encaissez d’abord le reste à charge du patient.");
+        return;
+      }
     }
     const occurredAt = new Date(paymentForm.occurred_at);
     if (Number.isNaN(occurredAt.getTime())) {
@@ -1705,7 +1736,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                           <td className="payments-table__amount">{formatAmount(payment.insurance_covered_amount ?? 0)} GNF</td>
                           <td className="payments-table__amount">{formatAmount(payment.amount)} GNF</td>
                           <td><span className={payment.insured ? "payment-tag payment-tag--insured" : "payment-tag"}>{payment.insured ? `${payment.insurance_name || "Assuré(e)"}${payment.insurance_percentage ? ` · ${Number(payment.insurance_percentage)} %` : ""}` : "Non assuré(e)"}</span></td>
-                          <td><span className={payment.status === "partial" ? "payment-tag payment-tag--partial" : "payment-tag payment-tag--paid"}>{payment.status === "partial" ? "Partiel" : "Payé"}</span></td>
+                          <td><span className={payment.status === "paid" ? "payment-tag payment-tag--paid" : "payment-tag payment-tag--partial"}>{getPaymentStatusLabel(payment.status, payment.insurance_name)}</span></td>
                           <td>{payment.practitioner}</td>
                           <td className="patients-row-actions"><button type="button" aria-label={`Imprimer la facture de ${payment.patient_name}`} onClick={() => printInvoice(payment)}><Printer size={15} /></button></td>
                         </tr>
@@ -1973,7 +2004,18 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                     <PatientSelect
                       options={patientOptions}
                       value={paymentForm.patient_id}
-                      onChange={(patientId) => setPaymentForm((current) => ({ ...current, patient_id: patientId }))}
+                      onChange={(patientId) => setPaymentForm((current) => {
+                        const patient = patients.find((item) => item.id === patientId);
+                        return {
+                          ...current,
+                          patient_id: patientId,
+                          amount: getExpectedPatientPayment(Number(current.total_amount), patient),
+                          status: current.status === "insurance_pending"
+                            && (!patient?.insured || Number(patient.insurance_percentage ?? 0) <= 0)
+                            ? "paid"
+                            : current.status,
+                        };
+                      })}
                       labelId="payment-patient-label"
                     />
                   </div>
@@ -1988,19 +2030,29 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                   </div>
                 </label>
                 <label>Tarif total de la prestation (GNF)
-                  <input type="number" inputMode="numeric" min="1" step="1" value={paymentForm.total_amount} onChange={(event) => setPaymentForm({ ...paymentForm, total_amount: event.target.value })} placeholder="Ex. 150000" required />
+                  <input type="number" inputMode="numeric" min="1" step="1" value={paymentForm.total_amount} onChange={(event) => {
+                    const totalAmount = event.target.value;
+                    setPaymentForm((current) => ({
+                      ...current,
+                      total_amount: totalAmount,
+                      amount: getExpectedPatientPayment(Number(totalAmount), paymentPatient),
+                    }));
+                  }} placeholder="Ex. 150000" required />
                 </label>
                 <label className="payment-select-label">Statut du règlement
                   <div className="payment-select-wrap">
                     <select value={paymentForm.status} onChange={(event) => setPaymentForm({ ...paymentForm, status: event.target.value })} required>
                       <option value="paid">Payé</option>
                       <option value="partial">Paiement partiel</option>
+                      {paymentPatient?.insured && paymentInsurancePercentage > 0 && (
+                        <option value="insurance_pending">Reste à payer par {paymentPatient.insurance_name || "l’assurance"}</option>
+                      )}
                     </select>
                     <ChevronDown size={15} className="payment-select-icon" />
                   </div>
                 </label>
-                <label>Montant total encaissé (GNF)
-                  <input type="number" inputMode="numeric" min="1" step="1" max={paymentForm.total_amount || undefined} value={paymentForm.amount} onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })} placeholder="Somme effectivement reçue" required />
+                <label>Montant encaissé auprès du patient (GNF)
+                  <input type="number" inputMode="numeric" min="0" step="1" max={paymentForm.total_amount || undefined} value={paymentForm.amount} onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })} placeholder="Calculé selon la couverture" required />
                 </label>
                 <label>Praticien
                   <input autoComplete="name" value={paymentForm.practitioner} onChange={(event) => setPaymentForm({ ...paymentForm, practitioner: event.target.value })} maxLength={150} placeholder="Nom du praticien" required />
@@ -2028,7 +2080,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                 </div>
               )}
               {paymentError && <p className="patients-error" role="alert">{paymentError}</p>}
-              <div className="payments-form-hint"><ShieldCheck size={15} /><span>La part d’assurance est calculée selon la couverture enregistrée sur la fiche du patient. Le montant encaissé est le total réellement reçu. Les données sont réservées à votre établissement.</span></div>
+              <div className="payments-form-hint"><ShieldCheck size={15} /><span>Le montant encaissé est prérempli selon le reste à charge du patient. Vous pouvez le modifier pour enregistrer un paiement partiel ; les montants reçus de l’assurance ne sont pas inclus. Les données sont réservées à votre établissement.</span></div>
               <div className="patients-form-actions">
                 <button className="patients-cancel" type="button" onClick={closePaymentForm}>Annuler</button>
                 <button className="button button--primary" type="submit" disabled={isPaymentSaving}>{isPaymentSaving ? "Enregistrement…" : "Enregistrer le paiement"}</button>
@@ -2048,7 +2100,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
             </header>
             <div className="invoice-title">
               <div><span>DOCUMENT DE PAIEMENT</span><h2 id="invoice-title">Facture / reçu</h2><p>Merci de votre confiance.</p></div>
-              <span className={selectedInvoice.status === "partial" ? "payment-tag payment-tag--partial" : "payment-tag payment-tag--paid"}>{selectedInvoice.status === "partial" ? "Paiement partiel" : "Payé"}</span>
+              <span className={selectedInvoice.status === "paid" ? "payment-tag payment-tag--paid" : "payment-tag payment-tag--partial"}>{getPaymentStatusLabel(selectedInvoice.status, selectedInvoice.insurance_name)}</span>
             </div>
             <div className="invoice-reference">
               <div><span>RÉFÉRENCE</span><strong>{selectedInvoice.id.slice(-8).toUpperCase()}</strong></div>

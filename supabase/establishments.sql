@@ -144,14 +144,14 @@ create table if not exists public.payments (
   patient_id uuid references public.patients (id) on delete set null,
   patient_name text not null check (length(trim(patient_name)) > 0),
   service text not null check (length(trim(service)) > 0),
-  amount bigint not null check (amount > 0),
+  amount bigint not null check (amount >= 0),
   total_amount bigint not null default 0,
   insured boolean not null default false,
   insurance_name text not null default '',
   insurance_percentage numeric(5,2) not null default 0,
   insurance_covered_amount bigint not null default 0,
   patient_due_amount bigint not null default 0,
-  status text not null check (status in ('paid', 'partial')),
+  status text not null check (status in ('paid', 'partial', 'insurance_pending')),
   practitioner text not null check (length(trim(practitioner)) > 0),
   occurred_at timestamptz not null,
   created_at timestamptz not null default now()
@@ -162,6 +162,12 @@ alter table public.payments add column if not exists insurance_name text not nul
 alter table public.payments add column if not exists insurance_percentage numeric(5,2) not null default 0;
 alter table public.payments add column if not exists insurance_covered_amount bigint not null default 0;
 alter table public.payments add column if not exists patient_due_amount bigint not null default 0;
+alter table public.payments drop constraint if exists payments_amount_check;
+alter table public.payments add constraint payments_amount_check
+  check (amount >= 0);
+alter table public.payments drop constraint if exists payments_status_check;
+alter table public.payments add constraint payments_status_check
+  check (status in ('paid', 'partial', 'insurance_pending'));
 
 update public.payments
 set total_amount = amount,
