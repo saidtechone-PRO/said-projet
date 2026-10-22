@@ -2012,9 +2012,17 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
               {paymentPatient && (
                 <div className="payment-insurance-breakdown" aria-live="polite">
                   <div className="payment-insurance-breakdown__heading">
-                    <strong>{paymentPatient.insured ? paymentPatient.insurance_name || "Assurance à compléter" : "Patient non assuré(e)"}</strong>
-                    {paymentPatient.insured && <span>{paymentInsurancePercentage} %</span>}
+                    <strong>Couverture d’assurance</strong>
+                    <span className={paymentPatient.insured ? "payment-insurance-breakdown__status" : "payment-insurance-breakdown__status payment-insurance-breakdown__status--none"}>
+                      {paymentPatient.insured ? "Assuré(e)" : "Non assuré(e)"}
+                    </span>
                   </div>
+                  {paymentPatient.insured && (
+                    <>
+                      <div><span>Nom de l’assurance</span><strong>{paymentPatient.insurance_name || "À compléter dans la fiche du patient"}</strong></div>
+                      <div><span>Taux de couverture</span><strong>{paymentInsurancePercentage} %</strong></div>
+                    </>
+                  )}
                   <div><span>Part prise en charge par l’assurance</span><strong>{formatAmount(paymentInsuranceCoveredAmount)} GNF</strong></div>
                   <div><span>Reste à charge du patient</span><strong>{formatAmount(paymentPatientDueAmount)} GNF</strong></div>
                 </div>
