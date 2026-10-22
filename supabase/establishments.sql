@@ -104,6 +104,40 @@ create policy "Users can delete their patients"
 
 grant select, insert, update, delete on public.patients to authenticated;
 
+create table if not exists public.insurance_providers (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  name text not null check (length(trim(name)) between 1 and 120),
+  created_at timestamptz not null default now()
+);
+
+create unique index if not exists insurance_providers_user_name_idx
+  on public.insurance_providers (user_id, lower(name));
+
+insert into public.insurance_providers (user_id, name)
+select distinct user_id, trim(insurance_name)
+from public.patients
+where insured
+  and length(trim(insurance_name)) > 0
+on conflict do nothing;
+
+alter table public.insurance_providers enable row level security;
+
+drop policy if exists "Users can read their insurance providers" on public.insurance_providers;
+drop policy if exists "Users can create their insurance providers" on public.insurance_providers;
+
+create policy "Users can read their insurance providers"
+  on public.insurance_providers for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+create policy "Users can create their insurance providers"
+  on public.insurance_providers for insert
+  to authenticated
+  with check (auth.uid() = user_id);
+
+grant select, insert on public.insurance_providers to authenticated;
+
 create table if not exists public.payments (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users (id) on delete cascade,

@@ -349,7 +349,7 @@ function InsuranceSelect({ value, onChange, labelId }) {
   );
 }
 
-function InsuranceNameSelect({ value, onChange, options }) {
+function InsuranceNameSelect({ value, onChange, options, onAddOption, isAddingOption }) {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef(null);
   const inputRef = useRef(null);
@@ -383,6 +383,11 @@ function InsuranceNameSelect({ value, onChange, options }) {
     onChange(option);
     setIsOpen(false);
     inputRef.current?.focus();
+  };
+
+  const addOption = async () => {
+    const addedOption = await onAddOption(query);
+    if (addedOption) selectOption(addedOption);
   };
 
   return (
@@ -460,7 +465,9 @@ function InsuranceNameSelect({ value, onChange, options }) {
                 type="button"
                 role="option"
                 aria-selected="false"
-                onClick={() => selectOption(query)}
+                disabled={isAddingOption}
+                aria-busy={isAddingOption}
+                onClick={addOption}
                 onKeyDown={(event) => {
                   if (event.key === "Escape") {
                     setIsOpen(false);
@@ -472,8 +479,11 @@ function InsuranceNameSelect({ value, onChange, options }) {
                   }
                 }}
               >
-                <span className="patient-select__copy"><strong>Utiliser « {query} »</strong><small>Ajouter ce nom d’assurance</small></span>
-                <Plus size={15} aria-hidden="true" />
+                <span className="patient-select__copy">
+                  <strong>{isAddingOption ? "Ajout en cours…" : `Ajouter « ${query} »`}</strong>
+                  <small>{isAddingOption ? "Enregistrement de l’assurance" : "Enregistrer ce nom pour le réutiliser"}</small>
+                </span>
+                {isAddingOption ? <span className="insurance-name-select__spinner" aria-hidden="true" /> : <Plus size={15} aria-hidden="true" />}
               </button>
             )}
             {!filteredOptions.length && !query && <p className="patient-select__empty" role="status">Saisissez un nom pour ajouter une assurance.</p>}
@@ -706,6 +716,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
   const [payments, setPayments] = useState([]);
   const [prescriptions, setPrescriptions] = useState([]);
   const [clinicalNotes, setClinicalNotes] = useState([]);
+  const [insuranceProviders, setInsuranceProviders] = useState([]);
   const [search, setSearch] = useState("");
   const [paymentSearch, setPaymentSearch] = useState("");
   const [activeView, setActiveView] = useState("dashboard");
@@ -740,6 +751,8 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
   const [isClinicalNoteSaving, setIsClinicalNoteSaving] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [error, setError] = useState("");
+  const [insuranceError, setInsuranceError] = useState("");
+  const [isInsuranceAdding, setIsInsuranceAdding] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [prescriptionError, setPrescriptionError] = useState("");
   const [clinicalNoteError, setClinicalNoteError] = useState("");
@@ -782,6 +795,23 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
   useEffect(() => {
     loadPatients();
   }, [loadPatients]);
+
+  const loadInsuranceProviders = useCallback(async () => {
+    if (isDemo) return;
+    const { data, error: loadError } = await requireSupabase()
+      .from("insurance_providers")
+      .select("id, name")
+      .order("name", { ascending: true });
+    if (loadError) {
+      setInsuranceError(loadError.message);
+      return;
+    }
+    setInsuranceProviders(data ?? []);
+  }, [isDemo]);
+
+  useEffect(() => {
+    loadInsuranceProviders();
+  }, [loadInsuranceProviders]);
 
   const loadPayments = useCallback(async () => {
     if (isDemo) return;
@@ -1019,12 +1049,65 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
   ], [patients]);
   const insuranceOptions = useMemo(() => {
     const uniqueNames = new Map();
+    insuranceProviders.forEach((provider) => {
+      const insuranceName = provider.name.trim();
+      if (insuranceName) uniqueNames.set(insuranceName.toLocaleLowerCase(), insuranceName);
+    });
     patients.forEach((patient) => {
       const insuranceName = patient.insurance_name?.trim();
       if (insuranceName) uniqueNames.set(insuranceName.toLocaleLowerCase(), insuranceName);
     });
     return [...uniqueNames.values()].sort((left, right) => left.localeCompare(right, "fr"));
-  }, [patients]);
+  }, [insuranceProviders, patients]);
+
+  const addInsuranceProvider = async (name) => {
+    const insuranceName = name.trim();
+    setInsuranceError("");
+    const existingName = insuranceOptions.find((option) => option.toLocaleLowerCase() === insuranceName.toLocaleLowerCase());
+    if (existingName) return existingName;
+
+    setIsInsuranceAdding(true);
+    if (isDemo) {
+      setInsuranceProviders((current) => [...current, { id: `demo-insurance-${Date.now()}`, name: insuranceName }]);
+      setIsInsuranceAdding(false);
+      return insuranceName;
+    }
+
+    const { data, error: saveError } = await requireSupabase()
+      .from("insurance_providers")
+      .insert({ name: insuranceName, user_id: user.id })
+      .select("id, name")
+      .single();
+    if (saveError?.code === "23505") {
+      const { data: existingProviders, error: loadError } = await requireSupabase()
+        .from("insurance_providers")
+        .select("id, name")
+        .eq("user_id", user.id);
+      if (loadError) {
+        setInsuranceError(loadError.message);
+        setIsInsuranceAdding(false);
+        return null;
+      }
+      const existingProvider = existingProviders?.find((provider) => (
+        provider.name.toLocaleLowerCase() === insuranceName.toLocaleLowerCase()
+      ));
+      if (existingProvider) {
+        setInsuranceProviders((current) => current.some((provider) => provider.id === existingProvider.id)
+          ? current
+          : [...current, existingProvider]);
+        setIsInsuranceAdding(false);
+        return existingProvider.name;
+      }
+    }
+    if (saveError) {
+      setInsuranceError(saveError.message);
+      setIsInsuranceAdding(false);
+      return null;
+    }
+    setInsuranceProviders((current) => [...current, data]);
+    setIsInsuranceAdding(false);
+    return data.name;
+  };
 
   const savePayment = async (event) => {
     event.preventDefault();
@@ -1778,6 +1861,8 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                       value={form.insurance_name}
                       onChange={(insurance_name) => setForm((current) => ({ ...current, insurance_name }))}
                       options={insuranceOptions}
+                      onAddOption={addInsuranceProvider}
+                      isAddingOption={isInsuranceAdding}
                     />
                   </label>
                   <label>Taux de couverture (%)
@@ -1788,6 +1873,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                   </label>
                 </div>
               )}
+              {insuranceError && <p className="patients-error" role="alert">{insuranceError}</p>}
               <p className="patient-age-help" id="patient-age-help">L’âge est calculé automatiquement à partir de la date de naissance.</p>
               {error && <p className="patients-error" role="alert">{error}</p>}
               <div className="patients-form-actions">

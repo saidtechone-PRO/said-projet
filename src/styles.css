@@ -1576,6 +1576,8 @@ h1, h2, h3, p { margin-top: 0; }
 .patient-form-insurance { width: 100%; }
 .patient-insurance-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 15px 13px; }
 .patient-insurance-percentage { display: flex; align-items: center; gap: 10px; }
+.patient-insurance-percentage input::-webkit-inner-spin-button, .patient-insurance-percentage input::-webkit-outer-spin-button { margin: 0; -webkit-appearance: none; }
+.patient-insurance-percentage input { -moz-appearance: textfield; }
 .patient-insurance-percentage > span { color: #9ce5d7; font-size: 13px; font-weight: 600; }
 .insurance-select .patient-select__option { min-height: 62px; }
 .insurance-name-select { min-width: 0; }
@@ -1588,6 +1590,8 @@ h1, h2, h3, p { margin-top: 0; }
 .insurance-name-select__menu .patient-select__results { max-height: min(240px,30vh); }
 .insurance-name-select__add { border-top-color: rgba(196,211,235,.1); }
 .insurance-name-select__add > svg { flex: 0 0 auto; color: #91e0d2; }
+.insurance-name-select__add:disabled { cursor: wait; opacity: .7; }
+.insurance-name-select__spinner { width: 15px; height: 15px; flex: 0 0 15px; border: 2px solid rgba(145,224,210,.25); border-top-color: #91e0d2; border-radius: 50%; animation: insurance-name-spin .7s linear infinite; }
 .payment-insurance-breakdown { display: grid; grid-column: 1 / -1; gap: 10px; padding: 14px 15px; border: 1px solid rgba(143,226,212,.18); border-radius: 11px; background: linear-gradient(110deg,rgba(75,186,169,.09),rgba(255,255,255,.025)); }
 .payment-insurance-breakdown > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #aeb9c7; font-size: 11px; }
 .payment-insurance-breakdown > div > strong { color: #e8edf1; font-size: 12px; font-weight: 600; text-align: right; }
@@ -1601,6 +1605,8 @@ h1, h2, h3, p { margin-top: 0; }
 .signup-form .patient-phone-input input:focus { border: 0; outline: 0; background: transparent; box-shadow: none; }
 .signup-form .patient-phone-input input::placeholder { color: #8f9baa; }
 .patient-form .patients-error, .patient-form .patients-form-actions { grid-column: 1 / -1; }
+
+@keyframes insurance-name-spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 560px) {
   .patient-edit-form-card { padding: 30px 22px 23px; }
