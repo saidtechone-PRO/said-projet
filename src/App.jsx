@@ -562,7 +562,7 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
                         <div className="signup-password-field">
                           <label htmlFor="signup-password">Mot de passe</label>
                           <span className="password-visibility-field">
-                            <input id="signup-password" autoComplete="new-password" name="password" placeholder="10 caractères minimum" type={isSignupPasswordVisible ? "text" : "password"} minLength={10} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} required />
+                            <input id="signup-password" autoComplete="new-password" name="password" placeholder="8 caractères minimum" type={isSignupPasswordVisible ? "text" : "password"} minLength={8} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} required />
                             <button type="button" className="password-visibility-toggle" aria-label={isSignupPasswordVisible ? "Masquer le mot de passe" : "Afficher le mot de passe"} aria-pressed={isSignupPasswordVisible} onClick={() => setIsSignupPasswordVisible((visible) => !visible)}>
                               {isSignupPasswordVisible ? <EyeOff size={17} /> : <Eye size={17} />}
                             </button>
