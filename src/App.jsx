@@ -283,10 +283,17 @@ async function saveEstablishmentProfile(userId, fullNameValue, establishment) {
 
 async function uploadEstablishmentLogo(userId, file) {
   if (!file) return "";
-  const extensions = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
+  const extensions = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/avif": "avif",
+    "image/bmp": "bmp",
+  };
   const extension = extensions[file.type];
   if (!extension || file.size > 2 * 1024 * 1024) {
-    throw new Error("Le logo doit être une image PNG, JPG ou WebP de 2 Mo maximum.");
+    throw new Error("Le logo doit être une image PNG, JPG, WebP, GIF, AVIF ou BMP de 2 Mo maximum.");
   }
   const path = `${userId}/logo.${extension}`;
   const { error } = await requireSupabase().storage
@@ -407,8 +414,8 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
           phone: String(form.get("phone") ?? "").trim(),
           teamSize: String(form.get("teamSize") ?? ""),
         };
-        if (logo && (!["image/png", "image/jpeg", "image/webp"].includes(logo.type) || logo.size > 2 * 1024 * 1024)) {
-          throw new Error("Le logo doit être une image PNG, JPG ou WebP de 2 Mo maximum.");
+        if (logo && (!["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif", "image/bmp"].includes(logo.type) || logo.size > 2 * 1024 * 1024)) {
+          throw new Error("Le logo doit être une image PNG, JPG, WebP, GIF, AVIF ou BMP de 2 Mo maximum.");
         }
         if (!signupUser) throw new Error("Confirmez d’abord votre adresse e-mail depuis le lien reçu.");
         establishmentDetails.logoUrl = await uploadEstablishmentLogo(signupUser.id, logo);
@@ -596,8 +603,8 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
                         </div>
                         <div className="signup-field">
                           <label htmlFor="establishment-logo">Logo de l’organisation <span>(facultatif)</span></label>
-                          <input id="establishment-logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)} />
-                          <small>PNG, JPG ou WebP · 2 Mo maximum. Il figurera sur les documents imprimés.</small>
+                          <input id="establishment-logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/avif,image/bmp" onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)} />
+                          <small>PNG, JPG, WebP, GIF, AVIF ou BMP · 2 Mo maximum. Il figurera sur les documents imprimés.</small>
                           {logoPreview && <img className="signup-logo-preview" src={logoPreview} alt="Aperçu du logo de l’établissement" />}
                         </div>
                       </>

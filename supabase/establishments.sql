@@ -44,7 +44,7 @@ create policy "Users can update their establishment"
 grant select, insert, update on public.establishments to authenticated;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
-values ('establishment-logos', 'establishment-logos', true, 2097152, array['image/png', 'image/jpeg', 'image/webp'])
+values ('establishment-logos', 'establishment-logos', true, 2097152, array['image/png', 'image/jpeg', 'image/webp', 'image/gif', 'image/avif', 'image/bmp'])
 on conflict (id) do update
 set public = excluded.public,
     file_size_limit = excluded.file_size_limit,
@@ -347,3 +347,5 @@ create policy "Users can create their clinical notes"
   );
 
 grant select, insert on public.clinical_notes to authenticated;
+
+notify pgrst, 'reload schema';
