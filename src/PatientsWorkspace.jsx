@@ -1270,6 +1270,12 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
               </div>
             </div>
             <div className="patient-record-actions">
+              {activeView === "patients" && (
+                <>
+                  <button className="button button--primary" type="button" onClick={() => openPaymentForm(selectedPatient.id, true)}><Wallet size={15} /> Nouveau paiement</button>
+                  <button className="patient-action-secondary" type="button" onClick={() => editPatient(selectedPatient)}><Pencil size={15} /> Modifier les informations</button>
+                </>
+              )}
               <button className="patient-action-secondary" type="button" onClick={() => openClinicalNoteForm(selectedPatient.id)}><Stethoscope size={15} /> Nouvelle consultation</button>
               <button className="patient-action-secondary" type="button" onClick={() => openPrescriptionForm(selectedPatient.id)}><ClipboardList size={15} /> Créer une ordonnance</button>
             </div>
