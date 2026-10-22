@@ -349,6 +349,100 @@ function InsuranceSelect({ value, onChange, labelId }) {
   );
 }
 
+function BirthMonthSelect({ value, onChange }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectRef = useRef(null);
+  const triggerRef = useRef(null);
+  const listboxId = useId();
+  const months = Array.from({ length: 12 }, (_, month) => ({
+    value: month,
+    label: new Intl.DateTimeFormat("fr-GN", { month: "long" }).format(new Date(2024, month, 1)),
+  }));
+  const selectedMonth = months[value];
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event) => {
+      if (selectRef.current && !selectRef.current.contains(event.target)) setIsOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const selectedButton = selectRef.current?.querySelector('[role="option"][aria-selected="true"]');
+    (selectedButton ?? selectRef.current?.querySelector('[role="option"]'))?.focus();
+  }, [isOpen]);
+
+  const focusOption = (event, direction) => {
+    event.preventDefault();
+    const optionButtons = Array.from(selectRef.current?.querySelectorAll('[role="option"]') ?? []);
+    const nextOption = optionButtons[optionButtons.indexOf(event.currentTarget) + direction];
+    nextOption?.focus();
+  };
+
+  return (
+    <div className={`birth-month-select${isOpen ? " birth-month-select--open" : ""}`} ref={selectRef}>
+      <button
+        ref={triggerRef}
+        className="birth-month-select__trigger"
+        type="button"
+        role="combobox"
+        aria-label="Mois"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={listboxId}
+        onClick={() => setIsOpen((open) => !open)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            setIsOpen(true);
+          }
+        }}
+      >
+        <span>{selectedMonth.label}</span>
+        <ChevronDown className={`patient-select__chevron${isOpen ? " patient-select__chevron--open" : ""}`} size={14} aria-hidden="true" />
+      </button>
+      {isOpen && (
+        <div className="patient-select__menu birth-month-select__menu">
+          <div className="patient-select__results" id={listboxId} role="listbox" aria-label="Mois de naissance">
+            {months.map((month) => {
+              const isSelected = month.value === value;
+              return (
+                <button
+                  className={`patient-select__option${isSelected ? " patient-select__option--selected" : ""}`}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  key={month.value}
+                  onClick={() => {
+                    onChange(month.value);
+                    setIsOpen(false);
+                    triggerRef.current?.focus();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setIsOpen(false);
+                      triggerRef.current?.focus();
+                    } else if (event.key === "ArrowDown") {
+                      focusOption(event, 1);
+                    } else if (event.key === "ArrowUp") {
+                      focusOption(event, -1);
+                    }
+                  }}
+                >
+                  <span className="patient-select__copy"><strong>{month.label}</strong></span>
+                  {isSelected && <Check className="patient-select__check" size={16} aria-hidden="true" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PatientBirthDatePicker({ value, onChange, maxDate }) {
   const [isOpen, setIsOpen] = useState(false);
   const [viewedDate, setViewedDate] = useState(() => {
@@ -359,7 +453,6 @@ function PatientBirthDatePicker({ value, onChange, maxDate }) {
   const today = new Date(`${maxDate}T00:00:00`);
   const currentYear = today.getFullYear();
   const selectedDate = value ? new Date(`${value}T00:00:00`) : null;
-  const monthLabel = new Intl.DateTimeFormat("fr-GN", { month: "long" }).format(viewedDate);
   const weekdays = Array.from({ length: 7 }, (_, index) => (
     new Intl.DateTimeFormat("fr-GN", { weekday: "short" }).format(new Date(2024, 0, index + 1))
   ));
@@ -410,15 +503,10 @@ function PatientBirthDatePicker({ value, onChange, maxDate }) {
           <div className="birth-date-calendar__header">
             <button type="button" aria-label="Mois précédent" onClick={() => shiftMonth(-1)}><ArrowLeft size={15} /></button>
             <div className="birth-date-calendar__selectors">
-              <select
-                aria-label="Mois"
+              <BirthMonthSelect
                 value={viewedDate.getMonth()}
-                onChange={(event) => setViewedDate(new Date(viewedDate.getFullYear(), Number(event.target.value), 1))}
-              >
-                {Array.from({ length: 12 }, (_, month) => (
-                  <option value={month} key={month}>{new Intl.DateTimeFormat("fr-GN", { month: "long" }).format(new Date(2024, month, 1))}</option>
-                ))}
-              </select>
+                onChange={(month) => setViewedDate(new Date(viewedDate.getFullYear(), month, 1))}
+              />
               <select
                 aria-label="Année"
                 value={viewedDate.getFullYear()}
