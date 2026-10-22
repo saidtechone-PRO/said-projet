@@ -17,11 +17,13 @@ Dans **SQL Editor** de Supabase, exécutez tout le contenu de [`supabase/establi
 
 ## 3. Authentification par e-mail
 
-Dans **Authentication > URL Configuration**, ajoutez l'URL du site et les URL de redirection. Pour le développement, ajoutez par exemple `http://localhost:5173/?signup=confirmed` (adaptez le port si Vite en choisit un autre), ainsi que l'URL de production suivie de `/?signup=confirmed`.
+Dans **Authentication > URL Configuration**, ajoutez l'URL du site et les URL de redirection. Pour le développement, ajoutez par exemple `http://localhost:5173/?signup=confirmed` et `http://localhost:5173/?password-reset=confirmed` (adaptez le port si Vite en choisit un autre), ainsi que les deux URL équivalentes en production.
 
 Dans **Authentication > Providers > Email**, activez la confirmation d'adresse e-mail.
 
 Dans **Authentication > Email Templates > Confirm signup**, utilisez le lien `{{ .ConfirmationURL }}` dans le bouton ou le lien de confirmation. L'inscription envoie un lien à l'adresse Gmail; après le clic, la personne revient dans Clinic DC pour renseigner les informations de son établissement, dont son adresse / résidence et, facultativement, son logo. Clinic DC n'enregistre ces informations qu'après la confirmation de l'adresse.
+
+Depuis la connexion, **Mot de passe oublié ?** envoie un lien de réinitialisation par e-mail. Le lien revient sur `/?password-reset=confirmed`, où la personne choisit un nouveau mot de passe d'au moins 8 caractères. Supabase doit autoriser cette URL de redirection dans **Authentication > URL Configuration**.
 
 ## 4. Espace médecin, patients, ordonnances et notes médicales
 

@@ -151,6 +151,7 @@ const facilityTypes = [
 ];
 
 const signupRedirectUrl = () => `${window.location.origin}/?signup=confirmed`;
+const passwordResetRedirectUrl = () => `${window.location.origin}/?password-reset=confirmed`;
 
 function FacilitySelect({ value, onChange, error }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -315,8 +316,12 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [isLoginPasswordVisible, setIsLoginPasswordVisible] = useState(false);
   const [isSignupPasswordVisible, setIsSignupPasswordVisible] = useState(false);
+  const [isNewPasswordVisible, setIsNewPasswordVisible] = useState(false);
+  const [isConfirmNewPasswordVisible, setIsConfirmNewPasswordVisible] = useState(false);
   const [establishment, setEstablishment] = useState(null);
   const [signupUser, setSignupUser] = useState(null);
   const [logoFile, setLogoFile] = useState(null);
@@ -358,6 +363,8 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
       setFullName("");
       setEmail("");
       setPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
       setEstablishment(null);
       setSignupUser(null);
       setLogoFile(null);
@@ -449,6 +456,50 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
     }
   };
 
+  const sendPasswordResetLink = async (event) => {
+    event.preventDefault();
+    setSignupError("");
+    setResendNotice("");
+    setIsSubmitting(true);
+    try {
+      const form = new FormData(event.currentTarget);
+      const resetEmail = String(form.get("email") ?? "").trim().toLowerCase();
+      const { error } = await requireSupabase().auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: passwordResetRedirectUrl(),
+      });
+      if (error) throw error;
+      setEmail(resetEmail);
+      setResendNotice(`Si un compte est associé à ${resetEmail}, un lien de réinitialisation vient de lui être envoyé.`);
+    } catch (error) {
+      setSignupError(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const updatePassword = async (event) => {
+    event.preventDefault();
+    setSignupError("");
+    if (newPassword.length < 8) {
+      setSignupError("Le nouveau mot de passe doit contenir au moins 8 caractères.");
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setSignupError("Les deux mots de passe ne correspondent pas.");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const { error } = await requireSupabase().auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setSubmitted(true);
+    } catch (error) {
+      setSignupError(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   if (!open) return null;
 
   return (
@@ -466,10 +517,12 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
         {submitted ? (
           <div className="signup-success">
             <span className="success-mark"><Check size={23} /></span>
-            <span className="eyebrow">{mode === "login" ? "CONNEXION RÉUSSIE" : "ADRESSE VÉRIFIÉE"}</span>
-            <h2 id="signup-title">Bienvenue sur Clinic DC.</h2>
+            <span className="eyebrow">{mode === "reset_password" ? "MOT DE PASSE MODIFIÉ" : mode === "login" ? "CONNEXION RÉUSSIE" : "ADRESSE VÉRIFIÉE"}</span>
+            <h2 id="signup-title">{mode === "reset_password" ? "Mot de passe réinitialisé." : "Bienvenue sur Clinic DC."}</h2>
             <p>
-              {mode === "login"
+              {mode === "reset_password"
+                ? "Votre nouveau mot de passe est enregistré. Vous pouvez maintenant accéder à votre compte."
+                : mode === "login"
                 ? "Vous êtes connecté à votre compte Clinic DC."
                 : "Votre compte et les informations de votre établissement ont été enregistrés."}
             </p>
@@ -514,7 +567,49 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
                   <button className="button button--primary signup-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? "Connexion…" : "Se connecter"} {!isSubmitting && <ArrowRight size={16} />}</button>
                   <p className="form-note"><LockKeyhole size={13} /> Vos informations restent confidentielles.</p>
                 </form>
+                <button className="auth-switch" type="button" onClick={() => { setSignupError(""); setResendNotice(""); onModeChange("forgot_password"); }}>Mot de passe oublié ?</button>
                 <button className="auth-switch" type="button" onClick={() => onModeChange("signup")}>Pas encore de compte ? S’inscrire</button>
+              </>
+            ) : mode === "forgot_password" ? (
+              <>
+                <span className="eyebrow">RÉCUPÉRATION DU COMPTE</span>
+                <h2 id="signup-title">Mot de passe oublié ?</h2>
+                <p className="modal-intro">Saisissez votre adresse e-mail. Si elle correspond à un compte, vous recevrez un lien pour choisir un nouveau mot de passe.</p>
+                <form className="signup-form" onSubmit={sendPasswordResetLink}>
+                  <label>Adresse e-mail<input autoComplete="email" name="email" placeholder="vous@exemple.com" type="email" defaultValue={email} required /></label>
+                  {signupError && <p className="signup-error" role="alert">{signupError}</p>}
+                  {resendNotice && <p className="auth-status-notice" role="status">{resendNotice}</p>}
+                  <button className="button button--primary signup-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? "Envoi du lien…" : "Envoyer le lien de réinitialisation"} {!isSubmitting && <ArrowRight size={16} />}</button>
+                </form>
+                <button className="auth-switch" type="button" onClick={() => { setSignupError(""); onModeChange("login"); }}>← Retour à la connexion</button>
+              </>
+            ) : mode === "reset_password" ? (
+              <>
+                <span className="eyebrow">SÉCURISATION DU COMPTE</span>
+                <h2 id="signup-title">Choisissez un nouveau mot de passe.</h2>
+                <p className="modal-intro">Votre nouveau mot de passe doit contenir au moins 8 caractères.</p>
+                <form className="signup-form" onSubmit={updatePassword}>
+                  <div className="signup-password-field">
+                    <label htmlFor="new-password">Nouveau mot de passe</label>
+                    <span className="password-visibility-field">
+                      <input id="new-password" autoComplete="new-password" type={isNewPasswordVisible ? "text" : "password"} minLength={8} maxLength={128} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required />
+                      <button type="button" className="password-visibility-toggle" aria-label={isNewPasswordVisible ? "Masquer le mot de passe" : "Afficher le mot de passe"} aria-pressed={isNewPasswordVisible} onClick={() => setIsNewPasswordVisible((visible) => !visible)}>
+                        {isNewPasswordVisible ? <EyeOff size={17} /> : <Eye size={17} />}
+                      </button>
+                    </span>
+                  </div>
+                  <div className="signup-password-field">
+                    <label htmlFor="confirm-new-password">Confirmer le nouveau mot de passe</label>
+                    <span className="password-visibility-field">
+                      <input id="confirm-new-password" autoComplete="new-password" type={isConfirmNewPasswordVisible ? "text" : "password"} minLength={8} maxLength={128} value={confirmNewPassword} onChange={(event) => setConfirmNewPassword(event.target.value)} required />
+                      <button type="button" className="password-visibility-toggle" aria-label={isConfirmNewPasswordVisible ? "Masquer le mot de passe" : "Afficher le mot de passe"} aria-pressed={isConfirmNewPasswordVisible} onClick={() => setIsConfirmNewPasswordVisible((visible) => !visible)}>
+                        {isConfirmNewPasswordVisible ? <EyeOff size={17} /> : <Eye size={17} />}
+                      </button>
+                    </span>
+                  </div>
+                  {signupError && <p className="signup-error" role="alert">{signupError}</p>}
+                  <button className="button button--primary signup-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? "Enregistrement…" : "Enregistrer le nouveau mot de passe"} {!isSubmitting && <ArrowRight size={16} />}</button>
+                </form>
               </>
             ) : (
               <>
@@ -809,20 +904,41 @@ function App() {
 
   useEffect(() => {
     if (!supabase) return undefined;
+    const clearAuthCallbackQuery = () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("signup");
+      url.searchParams.delete("password-reset");
+      url.searchParams.delete("code");
+      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+    };
+
     const completeConfirmedSignup = (session) => {
       const url = new URL(window.location.href);
       if (url.searchParams.get("signup") !== "confirmed" || !session?.user) return;
-
-      url.searchParams.delete("signup");
-      window.history.replaceState({}, document.title, `${url.pathname}${url.search}${url.hash}`);
+      clearAuthCallbackQuery();
       setConfirmedSignupUser(session.user);
       setAuthMode("signup");
       setSignupOpen(true);
     };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const completePasswordRecovery = (session) => {
+      const url = new URL(window.location.href);
+      if (!session?.user || url.searchParams.get("password-reset") !== "confirmed") return;
+      clearAuthCallbackQuery();
+      setAuthMode("reset_password");
+      setSignupOpen(true);
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setAuthenticatedUser(session?.user ?? null);
+      if (event === "PASSWORD_RECOVERY") {
+        clearAuthCallbackQuery();
+        setAuthMode("reset_password");
+        setSignupOpen(true);
+        return;
+      }
       completeConfirmedSignup(session);
+      completePasswordRecovery(session);
     });
     supabase.auth.getSession().then(({ data, error }) => {
       if (error) {
@@ -831,6 +947,7 @@ function App() {
       }
       setAuthenticatedUser(data.session?.user ?? null);
       completeConfirmedSignup(data.session);
+      completePasswordRecovery(data.session);
     });
     return () => subscription.unsubscribe();
   }, []);
