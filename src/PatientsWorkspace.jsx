@@ -1356,15 +1356,6 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                   </label>
                   <label>Quartier<input autoComplete="address-level3" value={form.quartier} onChange={(event) => setForm({ ...form, quartier: event.target.value })} maxLength={120} /></label>
                   <label>Ville<input autoComplete="address-level2" value={form.city} onChange={(event) => setForm({ ...form, city: event.target.value })} maxLength={100} required /></label>
-                  <label className="payment-select-label">Assurance
-                    <div className="payment-select-wrap">
-                      <select value={form.insured} onChange={(event) => setForm({ ...form, insured: event.target.value })} required>
-                        <option value="false">Non assuré(e)</option>
-                        <option value="true">Assuré(e)</option>
-                      </select>
-                      <ChevronDown size={15} className="payment-select-icon" />
-                    </div>
-                  </label>
                 </div>
                 <div className="patient-form-column">
                   <label>Nom<input autoComplete="family-name" value={form.last_name} onChange={(event) => setForm({ ...form, last_name: event.target.value })} maxLength={100} required /></label>
@@ -1383,6 +1374,15 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                   <label>Catégorie d’âge<input type="text" value={getPatientAgeGroup(form.birth_date ? getAgeFromBirthDate(form.birth_date) : form.age)} readOnly placeholder="Déterminée selon l’âge" /></label>
                 </div>
               </div>
+              <label className="payment-select-label patient-form-insurance">Assurance
+                <div className="payment-select-wrap">
+                  <select value={form.insured} onChange={(event) => setForm({ ...form, insured: event.target.value })} required>
+                    <option value="false">Non assuré(e)</option>
+                    <option value="true">Assuré(e)</option>
+                  </select>
+                  <ChevronDown size={16} className="payment-select-icon" />
+                </div>
+              </label>
               <p className="patient-age-help" id="patient-age-help">L’âge est calculé automatiquement à partir de la date de naissance.</p>
               {error && <p className="patients-error" role="alert">{error}</p>}
               <div className="patients-form-actions">
