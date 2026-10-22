@@ -1574,10 +1574,7 @@ h1, h2, h3, p { margin-top: 0; }
 .patient-form-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; }
 .patient-form-column { display: flex; min-width: 0; flex-direction: column; gap: 16px; }
 .patient-form-insurance { width: 100%; }
-.patient-form-insurance .payment-select-wrap select { height: 52px; border-color: rgba(143,226,212,.28); border-radius: 12px; background-color: rgba(7,14,24,.48); cursor: pointer; }
-.patient-form-insurance .payment-select-wrap select:hover { border-color: rgba(143,226,212,.55); background-color: rgba(7,14,24,.68); }
-.patient-form-insurance .payment-select-wrap select:focus { border-color: rgba(109,224,207,.8); box-shadow: 0 0 0 3px rgba(79,202,185,.14); }
-.patient-form-insurance .payment-select-wrap select option { color: #e0e5ed; background: #1c2737; }
+.insurance-select .patient-select__option { min-height: 62px; }
 .patient-phone-input { display: flex; height: 47px; align-items: center; overflow: hidden; border: 1px solid rgba(196,211,235,.16); border-radius: 10px; background: rgba(7,14,24,.36); transition: border-color .2s,box-shadow .2s; }
 .patient-phone-input:focus-within { border-color: rgba(109,224,207,.76); box-shadow: 0 0 0 3px rgba(79,202,185,.12); }
 .patient-phone-input > span { align-self: stretch; display: flex; align-items: center; padding: 0 12px; border-right: 1px solid rgba(196,211,235,.13); color: #9ce5d7; font-size: 13px; font-weight: 600; }

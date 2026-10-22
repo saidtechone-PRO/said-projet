@@ -248,6 +248,107 @@ function PatientSelect({ options, value, onChange, labelId }) {
   );
 }
 
+function InsuranceSelect({ value, onChange, labelId }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectRef = useRef(null);
+  const triggerRef = useRef(null);
+  const listboxId = useId();
+  const options = [
+    { value: "true", label: "Assuré(e)", detail: "Le patient bénéficie d’une couverture." },
+    { value: "false", label: "Non assuré(e)", detail: "Le patient ne bénéficie pas d’une couverture." },
+  ];
+  const selectedOption = options.find((option) => option.value === value) ?? options[1];
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event) => {
+      if (selectRef.current && !selectRef.current.contains(event.target)) setIsOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const selectedButton = selectRef.current?.querySelector('[role="option"][aria-selected="true"]');
+    (selectedButton ?? selectRef.current?.querySelector('[role="option"]'))?.focus();
+  }, [isOpen]);
+
+  const focusOption = (event, direction) => {
+    event.preventDefault();
+    const optionButtons = Array.from(selectRef.current?.querySelectorAll('[role="option"]') ?? []);
+    const nextOption = optionButtons[optionButtons.indexOf(event.currentTarget) + direction];
+    nextOption?.focus();
+  };
+
+  return (
+    <div className={`patient-select insurance-select${isOpen ? " patient-select--open" : ""}`} ref={selectRef}>
+      <button
+        ref={triggerRef}
+        className="patient-select__trigger"
+        type="button"
+        role="combobox"
+        aria-labelledby={labelId}
+        aria-required="true"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={listboxId}
+        onClick={() => setIsOpen((open) => !open)}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            setIsOpen(true);
+          }
+        }}
+      >
+        <span className="patient-select__copy">
+          <strong>{selectedOption.label}</strong>
+          <small>Statut de couverture du patient</small>
+        </span>
+        <ChevronDown className={`patient-select__chevron${isOpen ? " patient-select__chevron--open" : ""}`} size={16} aria-hidden="true" />
+      </button>
+      {isOpen && (
+        <div className="patient-select__menu">
+          <div className="patient-select__results" id={listboxId} role="listbox" aria-label="Statut d’assurance">
+            {options.map((option) => {
+              const isSelected = option.value === value;
+              return (
+                <button
+                  className={`patient-select__option${isSelected ? " patient-select__option--selected" : ""}`}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  key={option.value}
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsOpen(false);
+                    triggerRef.current?.focus();
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setIsOpen(false);
+                      triggerRef.current?.focus();
+                    } else if (event.key === "ArrowDown") {
+                      focusOption(event, 1);
+                    } else if (event.key === "ArrowUp") {
+                      focusOption(event, -1);
+                    }
+                  }}
+                >
+                  <span className="patient-select__copy">
+                    <strong>{option.label}</strong>
+                    <small>{option.detail}</small>
+                  </span>
+                  {isSelected && <Check className="patient-select__check" size={16} aria-hidden="true" />}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PatientBirthDatePicker({ value, onChange, maxDate }) {
   const [isOpen, setIsOpen] = useState(false);
   const [viewedDate, setViewedDate] = useState(() => {
@@ -1374,15 +1475,10 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                   <label>Catégorie d’âge<input type="text" value={getPatientAgeGroup(form.birth_date ? getAgeFromBirthDate(form.birth_date) : form.age)} readOnly placeholder="Déterminée selon l’âge" /></label>
                 </div>
               </div>
-              <label className="payment-select-label patient-form-insurance">Assurance
-                <div className="payment-select-wrap">
-                  <select value={form.insured} onChange={(event) => setForm({ ...form, insured: event.target.value })} required>
-                    <option value="false">Non assuré(e)</option>
-                    <option value="true">Assuré(e)</option>
-                  </select>
-                  <ChevronDown size={16} className="payment-select-icon" />
-                </div>
-              </label>
+              <div className="payment-select-label patient-form-insurance">
+                <span id="patient-insurance-label">Assurance</span>
+                <InsuranceSelect value={form.insured} onChange={(insured) => setForm({ ...form, insured })} labelId="patient-insurance-label" />
+              </div>
               <p className="patient-age-help" id="patient-age-help">L’âge est calculé automatiquement à partir de la date de naissance.</p>
               {error && <p className="patients-error" role="alert">{error}</p>}
               <div className="patients-form-actions">
