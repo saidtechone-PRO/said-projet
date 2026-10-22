@@ -48,6 +48,7 @@ create table if not exists public.patients (
   quartier text not null default '',
   home_address text not null,
   city text not null,
+  insured boolean not null default false,
   created_at timestamptz not null default now()
 );
 
@@ -57,6 +58,7 @@ alter table public.patients add column if not exists contact text not null defau
 alter table public.patients add column if not exists quartier text not null default '';
 alter table public.patients add column if not exists home_address text not null default '';
 alter table public.patients add column if not exists city text not null default '';
+alter table public.patients add column if not exists insured boolean not null default false;
 
 alter table public.patients drop constraint if exists patients_age_range;
 alter table public.patients add constraint patients_age_range

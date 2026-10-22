@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Activity, ArrowLeft, ArrowRight, CalendarDays, Check, ChevronDown, CircleDollarSign, ClipboardList, LayoutDashboard, LogOut, Mail, Pencil, Plus, Printer, Search, ShieldCheck, Stethoscope, Trash2, UsersRound, Wallet, X } from "lucide-react";
 import { requireSupabase } from "./lib/supabase";
 
-const emptyForm = { first_name: "", last_name: "", birth_date: "", age: "", contact: "", quartier: "", home_address: "", city: "" };
+const emptyForm = { first_name: "", last_name: "", birth_date: "", age: "", contact: "", quartier: "", home_address: "", city: "", insured: "false" };
 const emptyPrescriptionForm = {
   medications: [{ name: "", dosage: "", frequency: "", duration: "" }],
   instructions: "",
@@ -440,7 +440,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
     setError("");
     const { data, error: loadError } = await requireSupabase()
       .from("patients")
-      .select("id, full_name, birth_date, age, contact, quartier, home_address, city, created_at")
+      .select("id, full_name, birth_date, age, contact, quartier, home_address, city, insured, created_at")
       .order("created_at", { ascending: false });
     if (loadError) {
       setError(loadError.message);
@@ -815,6 +815,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
       quartier: patient.quartier ?? "",
       home_address: patient.home_address ?? "",
       city: patient.city ?? "",
+      insured: patient.insured ? "true" : "false",
     });
     setSelectedPatientId(null);
     setIsFormOpen(true);
@@ -843,6 +844,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
         ? patients.find((patient) => patient.id === editingPatientId)?.home_address ?? ""
         : "",
       city: form.city.trim(),
+      insured: form.insured === "true",
     };
 
     let data;
@@ -855,8 +857,8 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
     } else {
       const query = requireSupabase().from("patients");
       const { data: savedPatient, error: saveError } = editingPatientId
-        ? await query.update(details).eq("id", editingPatientId).select("id, full_name, birth_date, age, contact, quartier, home_address, city, created_at").single()
-        : await query.insert({ ...details, user_id: user.id }).select("id, full_name, birth_date, age, contact, quartier, home_address, city, created_at").single();
+        ? await query.update(details).eq("id", editingPatientId).select("id, full_name, birth_date, age, contact, quartier, home_address, city, insured, created_at").single()
+        : await query.insert({ ...details, user_id: user.id }).select("id, full_name, birth_date, age, contact, quartier, home_address, city, insured, created_at").single();
 
       if (saveError) {
         setError(saveError.message);
@@ -1354,6 +1356,15 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                   </label>
                   <label>Quartier<input autoComplete="address-level3" value={form.quartier} onChange={(event) => setForm({ ...form, quartier: event.target.value })} maxLength={120} /></label>
                   <label>Ville<input autoComplete="address-level2" value={form.city} onChange={(event) => setForm({ ...form, city: event.target.value })} maxLength={100} required /></label>
+                  <label className="payment-select-label">Assurance
+                    <div className="payment-select-wrap">
+                      <select value={form.insured} onChange={(event) => setForm({ ...form, insured: event.target.value })} required>
+                        <option value="false">Non assuré(e)</option>
+                        <option value="true">Assuré(e)</option>
+                      </select>
+                      <ChevronDown size={15} className="payment-select-icon" />
+                    </div>
+                  </label>
                 </div>
                 <div className="patient-form-column">
                   <label>Nom<input autoComplete="family-name" value={form.last_name} onChange={(event) => setForm({ ...form, last_name: event.target.value })} maxLength={100} required /></label>

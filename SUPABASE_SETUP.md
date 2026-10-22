@@ -35,7 +35,7 @@ Les informations de santé, y compris les notes de consultation, sont sensibles.
 
 Dans **SQL Editor** de Supabase, exécutez de nouveau le script [`supabase/establishments.sql`](./supabase/establishments.sql) pour créer la table `payments` et ses politiques RLS. L'espace Paiements permet d'enregistrer les règlements liés à un patient, la prestation, le montant encaissé en GNF, l'assurance, le statut payé/partiel, le praticien et la date/heure. L'historique et le total quotidien sont propres au compte connecté. Le bouton d'impression génère une facture/reçu pour chaque transaction.
 
-Pour créer la table `prescriptions` ou ajouter les champs Quartier et Date de naissance sur un projet déjà configuré, réexécutez également le script [`supabase/establishments.sql`](./supabase/establishments.sql), qui peut être relancé sans supprimer les données existantes.
+Pour créer la table `prescriptions` ou ajouter les champs Quartier, Date de naissance et Assurance du patient sur un projet déjà configuré, réexécutez également le script [`supabase/establishments.sql`](./supabase/establishments.sql), qui peut être relancé sans supprimer les données existantes. Le champ Assurance du formulaire patient permet d'enregistrer si le patient est assuré; les dossiers existants sont considérés comme non assurés par défaut.
 
 Le montant saisi correspond à la somme encaissée lors de cette transaction. Pour un règlement partiel, enregistrez le montant reçu et sélectionnez « Paiement partiel ».
 
