@@ -51,6 +51,24 @@ function formatAmount(amount) {
   return new Intl.NumberFormat("fr-GN", { maximumFractionDigits: 0 }).format(amount);
 }
 
+function DocumentBrand({ profile, subtitle }) {
+  const name = profile?.establishment_name?.trim() || "Clinic DC";
+  const address = [profile?.address, profile?.city, profile?.country].filter(Boolean).join(" · ");
+  return (
+    <header className="invoice-brand">
+      <span className="invoice-brand__mark">
+        {profile?.logo_url
+          ? <img src={profile.logo_url} alt={`Logo de ${name}`} />
+          : <Stethoscope size={23} />}
+      </span>
+      <div>
+        <strong>{name}</strong>
+        <small>{[subtitle, address, profile?.phone].filter(Boolean).join(" · ")}</small>
+      </div>
+    </header>
+  );
+}
+
 function getPaymentStatusLabel(status, insuranceName = "") {
   if (status === "partial") return "Paiement partiel";
   if (status === "insurance_pending") return `Reste à payer par ${insuranceName || "l’assurance"}`;
@@ -755,6 +773,9 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
   const [isPrescriptionFormOpen, setIsPrescriptionFormOpen] = useState(false);
   const [isClinicalNoteFormOpen, setIsClinicalNoteFormOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
+  const [selectedPrescription, setSelectedPrescription] = useState(null);
+  const [establishmentProfile, setEstablishmentProfile] = useState(null);
+  const [establishmentProfileError, setEstablishmentProfileError] = useState("");
   const [isLoading, setIsLoading] = useState(!isDemo);
   const [isPaymentsLoading, setIsPaymentsLoading] = useState(!isDemo);
   const [isPrescriptionsLoading, setIsPrescriptionsLoading] = useState(!isDemo);
@@ -779,7 +800,8 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
       || isPaymentFormOpen
       || isPrescriptionFormOpen
       || isClinicalNoteFormOpen
-      || selectedInvoice,
+      || selectedInvoice
+      || selectedPrescription,
     );
     if (!isDialogOpen) return undefined;
 
@@ -788,7 +810,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [selectedPatientId, isFormOpen, isPaymentFormOpen, isPrescriptionFormOpen, isClinicalNoteFormOpen, selectedInvoice]);
+  }, [selectedPatientId, isFormOpen, isPaymentFormOpen, isPrescriptionFormOpen, isClinicalNoteFormOpen, selectedInvoice, selectedPrescription]);
 
   const loadPatients = useCallback(async () => {
     if (isDemo) return;
@@ -809,6 +831,25 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
   useEffect(() => {
     loadPatients();
   }, [loadPatients]);
+
+  useEffect(() => {
+    if (isDemo) return undefined;
+    let isMounted = true;
+    const loadEstablishmentProfile = async () => {
+      const { data, error: loadError } = await requireSupabase()
+        .from("establishments")
+        .select("establishment_name, address, city, country, phone, logo_url")
+        .maybeSingle();
+      if (!isMounted) return;
+      if (loadError) {
+        setEstablishmentProfileError(`Impossible de charger l’identité de l’établissement. Vérifiez que le script Supabase à jour a été exécuté. ${loadError.message}`);
+        return;
+      }
+      setEstablishmentProfile(data);
+    };
+    loadEstablishmentProfile();
+    return () => { isMounted = false; };
+  }, [isDemo, user.id]);
 
   const loadInsuranceProviders = useCallback(async () => {
     if (isDemo) return;
@@ -1279,6 +1320,10 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
     setSelectedInvoice(payment);
   };
 
+  const printPrescription = (prescription) => {
+    setSelectedPrescription(prescription);
+  };
+
   const openNewPatientForm = () => {
     setError("");
     setEditingPatientId(null);
@@ -1421,6 +1466,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
             <button type="button" onClick={onSignOut}>Quitter l’aperçu</button>
           </div>
         )}
+        {establishmentProfileError && <p className="patients-error" role="alert">{establishmentProfileError}</p>}
         <nav className="workspace-nav" aria-label="Navigation de l’espace de travail">
           <button className={activeView === "dashboard" ? "workspace-nav__item workspace-nav__item--active" : "workspace-nav__item"} type="button" onClick={() => setActiveView("dashboard")}>
             <LayoutDashboard size={16} /> Tableau de bord
@@ -1817,6 +1863,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                       <div className="patient-history-card__meta"><strong>{new Intl.DateTimeFormat("fr-GN", { dateStyle: "medium" }).format(new Date(prescription.issued_at))}</strong><span>Dr {prescription.practitioner}</span></div>
                       <ul>{(prescription.medications ?? []).map((medication, index) => <li key={`${prescription.id}-${index}`}><strong>{medication.name}</strong><span>{medication.dosage} · {medication.frequency} · {medication.duration}</span></li>)}</ul>
                       {prescription.instructions && <p>{prescription.instructions}</p>}
+                      <button className="prescription-print-button" type="button" onClick={() => printPrescription(prescription)}><Printer size={14} /> Imprimer l’ordonnance</button>
                     </article>
                   ))}
             </section>
@@ -2091,13 +2138,10 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
       )}
 
       {selectedInvoice && (
-        <div className="patients-overlay invoice-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedInvoice(null); }}>
+        <div className="patients-overlay print-document-overlay invoice-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedInvoice(null); }}>
           <section className="invoice-card" role="dialog" aria-modal="true" aria-labelledby="invoice-title">
             <button className="patients-form-close invoice-close" type="button" aria-label="Fermer la facture" onClick={() => setSelectedInvoice(null)}><X size={18} /></button>
-            <header className="invoice-brand">
-              <span className="invoice-brand__mark"><Stethoscope size={23} /></span>
-              <div><strong>Clinic DC</strong><small>Facture de prestation médicale</small></div>
-            </header>
+            <DocumentBrand profile={establishmentProfile} subtitle="Facture de prestation médicale" />
             <div className="invoice-title">
               <div><span>DOCUMENT DE PAIEMENT</span><h2 id="invoice-title">Facture / reçu</h2><p>Merci de votre confiance.</p></div>
               <span className={selectedInvoice.status === "paid" ? "payment-tag payment-tag--paid" : "payment-tag payment-tag--partial"}>{getPaymentStatusLabel(selectedInvoice.status, selectedInvoice.insurance_name)}</span>
@@ -2124,6 +2168,36 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
             <div className="invoice-actions">
               <button className="patients-cancel" type="button" onClick={() => setSelectedInvoice(null)}>Fermer</button>
               <button className="button button--primary" type="button" onClick={() => window.print()}><Printer size={16} /> Imprimer la facture</button>
+            </div>
+          </section>
+        </div>
+      )}
+      {selectedPrescription && (
+        <div className="patients-overlay print-document-overlay invoice-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedPrescription(null); }}>
+          <section className="invoice-card prescription-document-card" role="dialog" aria-modal="true" aria-labelledby="prescription-document-title">
+            <button className="patients-form-close invoice-close" type="button" aria-label="Fermer l’ordonnance" onClick={() => setSelectedPrescription(null)}><X size={18} /></button>
+            <DocumentBrand profile={establishmentProfile} subtitle="Ordonnance médicale" />
+            <div className="invoice-title">
+              <div><span>DOCUMENT MÉDICAL</span><h2 id="prescription-document-title">Ordonnance</h2><p>{new Intl.DateTimeFormat("fr-GN", { dateStyle: "long" }).format(new Date(selectedPrescription.issued_at))}</p></div>
+            </div>
+            <div className="invoice-details">
+              <div><span>Patient</span><strong>{selectedPrescription.patient_name}</strong></div>
+              <div><span>Praticien</span><strong>Dr {selectedPrescription.practitioner}</strong></div>
+            </div>
+            <section className="prescription-document-medications">
+              <h3>Médicaments prescrits</h3>
+              <ol>{(selectedPrescription.medications ?? []).map((medication, index) => (
+                <li key={`${selectedPrescription.id}-print-${index}`}>
+                  <strong>{medication.name}</strong>
+                  <span>{medication.dosage} · {medication.frequency} · {medication.duration}</span>
+                </li>
+              ))}</ol>
+            </section>
+            {selectedPrescription.instructions && <div className="prescription-document-instructions"><strong>Instructions complémentaires</strong><p>{selectedPrescription.instructions}</p></div>}
+            <footer className="invoice-footer">Document réservé au patient et aux professionnels de santé autorisés.</footer>
+            <div className="invoice-actions">
+              <button className="patients-cancel" type="button" onClick={() => setSelectedPrescription(null)}>Fermer</button>
+              <button className="button button--primary" type="button" onClick={() => window.print()}><Printer size={16} /> Imprimer l’ordonnance</button>
             </div>
           </section>
         </div>

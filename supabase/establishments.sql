@@ -3,13 +3,18 @@ create table if not exists public.establishments (
   full_name text not null,
   establishment_name text not null,
   facility_type text not null,
+  address text not null default '',
   country text not null,
   city text not null,
   phone text not null,
   team_size text not null,
+  logo_url text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.establishments add column if not exists address text not null default '';
+alter table public.establishments add column if not exists logo_url text not null default '';
 
 alter table public.establishments enable row level security;
 
@@ -37,6 +42,45 @@ create policy "Users can update their establishment"
   with check (auth.uid() = user_id);
 
 grant select, insert, update on public.establishments to authenticated;
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('establishment-logos', 'establishment-logos', true, 2097152, array['image/png', 'image/jpeg', 'image/webp'])
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Users can read their establishment logos" on storage.objects;
+drop policy if exists "Users can upload their establishment logos" on storage.objects;
+drop policy if exists "Users can update their establishment logos" on storage.objects;
+
+create policy "Users can read their establishment logos"
+  on storage.objects for select
+  to authenticated
+  using (
+    bucket_id = 'establishment-logos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Users can upload their establishment logos"
+  on storage.objects for insert
+  to authenticated
+  with check (
+    bucket_id = 'establishment-logos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Users can update their establishment logos"
+  on storage.objects for update
+  to authenticated
+  using (
+    bucket_id = 'establishment-logos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  )
+  with check (
+    bucket_id = 'establishment-logos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
 
 create table if not exists public.patients (
   id uuid primary key default gen_random_uuid(),

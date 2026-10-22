@@ -12,6 +12,8 @@ import {
   CircleHelp,
   ClipboardList,
   Clock3,
+  Eye,
+  EyeOff,
   FileText,
   HeartPulse,
   Hospital,
@@ -269,12 +271,29 @@ async function saveEstablishmentProfile(userId, fullNameValue, establishment) {
     full_name: fullNameValue,
     establishment_name: establishment.name,
     facility_type: establishment.type,
+    address: establishment.address,
     country: establishment.country,
     city: establishment.city,
     phone: establishment.phone,
     team_size: establishment.teamSize,
+    logo_url: establishment.logoUrl,
   }, { onConflict: "user_id" });
   if (error) throw error;
+}
+
+async function uploadEstablishmentLogo(userId, file) {
+  if (!file) return "";
+  const extensions = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
+  const extension = extensions[file.type];
+  if (!extension || file.size > 2 * 1024 * 1024) {
+    throw new Error("Le logo doit être une image PNG, JPG ou WebP de 2 Mo maximum.");
+  }
+  const path = `${userId}/logo.${extension}`;
+  const { error } = await requireSupabase().storage
+    .from("establishment-logos")
+    .upload(path, file, { cacheControl: "3600", contentType: file.type, upsert: true });
+  if (error) throw error;
+  return requireSupabase().storage.from("establishment-logos").getPublicUrl(path).data.publicUrl;
 }
 
 function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, onSignupConfirmationHandled }) {
@@ -289,8 +308,22 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoginPasswordVisible, setIsLoginPasswordVisible] = useState(false);
+  const [isSignupPasswordVisible, setIsSignupPasswordVisible] = useState(false);
   const [establishment, setEstablishment] = useState(null);
   const [signupUser, setSignupUser] = useState(null);
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState("");
+
+  useEffect(() => {
+    if (!logoFile) {
+      setLogoPreview("");
+      return undefined;
+    }
+    const previewUrl = URL.createObjectURL(logoFile);
+    setLogoPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [logoFile]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -320,6 +353,7 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
       setPassword("");
       setEstablishment(null);
       setSignupUser(null);
+      setLogoFile(null);
     }
   }, [open]);
 
@@ -362,17 +396,24 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
           return;
         }
         const form = new FormData(event.currentTarget);
+        const selectedLogo = form.get("logo");
+        const logo = selectedLogo instanceof File && selectedLogo.size > 0 ? selectedLogo : null;
         const establishmentDetails = {
           name: String(form.get("facilityName") ?? "").trim(),
           type: facility,
+          address: String(form.get("address") ?? "").trim(),
           country: String(form.get("country") ?? "").trim(),
           city: String(form.get("city") ?? "").trim(),
           phone: String(form.get("phone") ?? "").trim(),
           teamSize: String(form.get("teamSize") ?? ""),
         };
-        setEstablishment(establishmentDetails);
+        if (logo && (!["image/png", "image/jpeg", "image/webp"].includes(logo.type) || logo.size > 2 * 1024 * 1024)) {
+          throw new Error("Le logo doit être une image PNG, JPG ou WebP de 2 Mo maximum.");
+        }
         if (!signupUser) throw new Error("Confirmez d’abord votre adresse e-mail depuis le lien reçu.");
+        establishmentDetails.logoUrl = await uploadEstablishmentLogo(signupUser.id, logo);
         await saveEstablishmentProfile(signupUser.id, signupUser.user_metadata?.full_name ?? fullName, establishmentDetails);
+        setEstablishment(establishmentDetails);
         setSubmitted(true);
       }
     } catch (error) {
@@ -453,7 +494,15 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
                   }
                 }}>
                   <label>Adresse e-mail<input autoComplete="email" name="email" placeholder="vous@exemple.com" type="email" required /></label>
-                  <label>Mot de passe<input autoComplete="current-password" name="password" placeholder="Votre mot de passe" type="password" required /></label>
+                  <div className="signup-password-field">
+                    <label htmlFor="login-password">Mot de passe</label>
+                    <span className="password-visibility-field">
+                      <input id="login-password" autoComplete="current-password" name="password" placeholder="Votre mot de passe" type={isLoginPasswordVisible ? "text" : "password"} required />
+                      <button type="button" className="password-visibility-toggle" aria-label={isLoginPasswordVisible ? "Masquer le mot de passe" : "Afficher le mot de passe"} aria-pressed={isLoginPasswordVisible} onClick={() => setIsLoginPasswordVisible((visible) => !visible)}>
+                        {isLoginPasswordVisible ? <EyeOff size={17} /> : <Eye size={17} />}
+                      </button>
+                    </span>
+                  </div>
                   {signupError && <p className="signup-error" role="alert">{signupError}</p>}
                   <button className="button button--primary signup-submit" type="submit" disabled={isSubmitting}>{isSubmitting ? "Connexion…" : "Se connecter"} {!isSubmitting && <ArrowRight size={16} />}</button>
                   <p className="form-note"><LockKeyhole size={13} /> Vos informations restent confidentielles.</p>
@@ -510,10 +559,15 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
                           Adresse Gmail
                           <input autoComplete="email" name="email" placeholder="vous@gmail.com" type="email" pattern="[^@ ]+@(gmail[.]com|googlemail[.]com)" title="Utilisez une adresse se terminant par @gmail.com" value={email} onChange={(event) => setEmail(event.target.value)} required />
                         </label>
-                        <label>
-                          Mot de passe
-                          <input autoComplete="new-password" name="password" placeholder="10 caractères minimum" type="password" minLength={10} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} required />
-                        </label>
+                        <div className="signup-password-field">
+                          <label htmlFor="signup-password">Mot de passe</label>
+                          <span className="password-visibility-field">
+                            <input id="signup-password" autoComplete="new-password" name="password" placeholder="10 caractères minimum" type={isSignupPasswordVisible ? "text" : "password"} minLength={10} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} required />
+                            <button type="button" className="password-visibility-toggle" aria-label={isSignupPasswordVisible ? "Masquer le mot de passe" : "Afficher le mot de passe"} aria-pressed={isSignupPasswordVisible} onClick={() => setIsSignupPasswordVisible((visible) => !visible)}>
+                              {isSignupPasswordVisible ? <EyeOff size={17} /> : <Eye size={17} />}
+                            </button>
+                          </span>
+                        </div>
                         <p className="form-note"><LockKeyhole size={13} /> Votre adresse doit être confirmée avant l’activation du compte.</p>
                       </>
                     ) : (
@@ -527,6 +581,7 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
                           <label>Ville<input autoComplete="address-level2" name="city" placeholder="Ex. Conakry" maxLength={100} required /></label>
                           <label>Pays<input autoComplete="country-name" name="country" defaultValue="Guinée" maxLength={100} required /></label>
                         </div>
+                        <label>Adresse / résidence<input autoComplete="street-address" name="address" placeholder="Ex. Quartier, rue et numéro" maxLength={200} required /></label>
                         <div className="signup-form__row">
                           <label>Téléphone<input autoComplete="tel" name="phone" type="tel" placeholder="+224 6XX XX XX XX" maxLength={40} required /></label>
                           <label>Taille de l’équipe
@@ -538,6 +593,12 @@ function SignupModal({ open, onClose, mode, onModeChange, confirmedSignupUser, o
                               <option value="51+">Plus de 50 personnes</option>
                             </select>
                           </label>
+                        </div>
+                        <div className="signup-field">
+                          <label htmlFor="establishment-logo">Logo de l’organisation <span>(facultatif)</span></label>
+                          <input id="establishment-logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setLogoFile(event.target.files?.[0] ?? null)} />
+                          <small>PNG, JPG ou WebP · 2 Mo maximum. Il figurera sur les documents imprimés.</small>
+                          {logoPreview && <img className="signup-logo-preview" src={logoPreview} alt="Aperçu du logo de l’établissement" />}
                         </div>
                       </>
                     )}

@@ -13,7 +13,7 @@ Ne placez jamais une clé `service_role` ou une clé secrète dans une variable 
 
 ## 2. Créer la table protégée
 
-Dans **SQL Editor** de Supabase, exécutez le contenu de [`supabase/establishments.sql`](./supabase/establishments.sql). Le script peut être relancé : il configure l'établissement du compte ainsi que le répertoire des patients, et recrée les politiques RLS pour limiter chaque utilisateur authentifié à ses propres données.
+Dans **SQL Editor** de Supabase, exécutez le contenu de [`supabase/establishments.sql`](./supabase/establishments.sql). Le script peut être relancé : il configure l'établissement du compte, le stockage des logos et le répertoire des patients, et recrée les politiques RLS pour limiter chaque utilisateur authentifié à ses propres données. Les logos sont limités aux images PNG, JPG ou WebP de 2 Mo maximum ; seuls les membres authentifiés peuvent téléverser ou remplacer le logo de leur propre établissement.
 
 ## 3. Authentification par e-mail
 
@@ -21,7 +21,7 @@ Dans **Authentication > URL Configuration**, ajoutez l'URL du site et les URL de
 
 Dans **Authentication > Providers > Email**, activez la confirmation d'adresse e-mail.
 
-Dans **Authentication > Email Templates > Confirm signup**, utilisez le lien `{{ .ConfirmationURL }}` dans le bouton ou le lien de confirmation. L'inscription envoie un lien à l'adresse Gmail; après le clic, la personne revient dans Clinic DC pour renseigner les informations de son établissement. Clinic DC n'enregistre ces informations qu'après la confirmation de l'adresse.
+Dans **Authentication > Email Templates > Confirm signup**, utilisez le lien `{{ .ConfirmationURL }}` dans le bouton ou le lien de confirmation. L'inscription envoie un lien à l'adresse Gmail; après le clic, la personne revient dans Clinic DC pour renseigner les informations de son établissement, dont son adresse / résidence et, facultativement, son logo. Clinic DC n'enregistre ces informations qu'après la confirmation de l'adresse.
 
 ## 4. Espace médecin, patients, ordonnances et notes médicales
 
@@ -33,7 +33,7 @@ Les informations de santé, y compris les notes de consultation, sont sensibles.
 
 ## 5. Paiements et factures
 
-Dans **SQL Editor** de Supabase, exécutez de nouveau le script [`supabase/establishments.sql`](./supabase/establishments.sql) pour créer la table `payments` et ses politiques RLS. L'espace Paiements permet d'enregistrer les règlements liés à un patient, la prestation, le montant encaissé en GNF, l'assurance, le statut payé/partiel ou « Reste à payer par [assurance] », le praticien et la date/heure. Ce dernier statut s'applique lorsque le reste à charge du patient est encaissé, mais que la part de l'assurance reste due. L'historique et le total quotidien sont propres au compte connecté. Le bouton d'impression génère une facture/reçu pour chaque transaction.
+Dans **SQL Editor** de Supabase, exécutez de nouveau le script [`supabase/establishments.sql`](./supabase/establishments.sql) pour créer la table `payments` et ses politiques RLS. L'espace Paiements permet d'enregistrer les règlements liés à un patient, la prestation, le montant encaissé en GNF, l'assurance, le statut payé/partiel ou « Reste à payer par [assurance] », le praticien et la date/heure. Ce dernier statut s'applique lorsque le reste à charge du patient est encaissé, mais que la part de l'assurance reste due. L'historique et le total quotidien sont propres au compte connecté. Les factures/reçus et les ordonnances imprimées affichent le nom, l'adresse et le logo renseignés à l'inscription.
 
 Pour créer la table `prescriptions` ou ajouter les champs Quartier, Date de naissance, nom et taux de couverture de l'assurance, ainsi que la liste d'assurances réutilisables, réexécutez également le script [`supabase/establishments.sql`](./supabase/establishments.sql), qui peut être relancé sans supprimer les données existantes. Les noms d'assurance déjà présents sur les fiches patients sont ajoutés à cette liste lors de la migration. Les paiements conservent le tarif total, la part calculée de l'assurance, le reste à charge du patient et le montant réellement encaissé. Les paiements déjà enregistrés conservent leur montant et sont repris avec un tarif total égal au montant encaissé.
 

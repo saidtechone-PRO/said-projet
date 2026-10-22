@@ -360,10 +360,21 @@ h1, h2, h3, p { margin-top: 0; }
 .signup-form { display: flex; flex-direction: column; gap: 16px; }
 .signup-form__row { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
 .signup-form label { display: flex; flex-direction: column; gap: 8px; color: #e0e5ed; font-size: 12px; font-weight: 600; }
+.signup-password-field { display: flex; flex-direction: column; gap: 8px; }
+.signup-form .signup-password-field > label { display: block; }
+.password-visibility-field { position: relative; display: block; width: 100%; }
+.signup-form .password-visibility-field input { padding-right: 47px; }
+.password-visibility-toggle { position: absolute; top: 50%; right: 8px; display: grid; width: 32px; height: 32px; place-items: center; padding: 0; transform: translateY(-50%); border: 0; border-radius: 7px; color: #aebbd1; background: transparent; cursor: pointer; }
+.password-visibility-toggle:hover, .password-visibility-toggle:focus-visible { color: #91e0d2; background: rgba(255,255,255,.07); }
+.password-visibility-toggle:focus-visible { outline: 2px solid rgba(109,224,207,.76); outline-offset: 1px; }
 .signup-field { display: flex; flex-direction: column; gap: 8px; color: #e0e5ed; font-size: 12px; font-weight: 600; }
 .signup-form input, .signup-form select { width: 100%; height: 47px; padding: 0 14px; border: 1px solid rgba(196, 211, 235, .16); border-radius: 10px; color: #f3f5ed; background: rgba(7, 14, 24, .36); font-size: 13px; transition: border-color .2s ease,background .2s ease,box-shadow .2s ease; }
 .signup-form input:focus, .signup-form select:focus { border-color: rgba(109, 224, 207, .76); outline: none; background: rgba(7, 14, 24, .55); box-shadow: 0 0 0 3px rgba(79, 202, 185, .12); }
 .signup-form input::placeholder { color: #8f9baa; }
+.signup-form input[type="file"] { height: auto; min-height: 47px; padding: 11px; color: #bfc9d6; font-size: 11px; }
+.signup-form input[type="file"]::file-selector-button { margin-right: 10px; padding: 7px 10px; border: 1px solid rgba(196,211,235,.18); border-radius: 7px; color: #e0e5ed; background: rgba(255,255,255,.06); cursor: pointer; }
+.signup-field > label span, .signup-field > small { color: #9eabba; font-size: 10px; font-weight: 400; }
+.signup-logo-preview { width: 72px; height: 72px; padding: 5px; border: 1px solid rgba(196,211,235,.16); border-radius: 10px; background: rgba(255,255,255,.06); object-fit: contain; }
 .signup-form select { color: #cfd3db; }
 .signup-form select option { color: #222; }
 .facility-select { position: relative; z-index: 1; }
@@ -761,8 +772,20 @@ h1, h2, h3, p { margin-top: 0; }
 .invoice-close { border-color: #e2e8eb; color: #65727d; background: #f8fafb; }
 .invoice-brand { display: flex; align-items: center; gap: 12px; padding-bottom: 23px; border-bottom: 2px solid #dceeea; }
 .invoice-brand__mark { display: grid; width: 46px; height: 46px; place-items: center; border: 1px solid #d1e9e3; border-radius: 13px; color: #24766d; background: #e8f5f1; }
+.invoice-brand__mark img { width: 100%; height: 100%; padding: 4px; border-radius: inherit; object-fit: contain; }
 .invoice-brand strong { display: block; color: #1d2933; font-family: var(--font-display); font-size: 19px; letter-spacing: -.04em; }
 .invoice-brand small { display: block; margin-top: 3px; color: #71808c; font-size: 11px; }
+.prescription-print-button { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 0; border: 0; color: #91e0d2; background: transparent; cursor: pointer; font-size: 10px; font-weight: 600; }
+.prescription-print-button:hover { color: #d3fff6; }
+.prescription-document-medications { padding: 20px 0; }
+.prescription-document-medications h3 { margin: 0 0 12px; color: #1d2933; font-family: var(--font-display); font-size: 15px; }
+.prescription-document-medications ol { display: grid; gap: 12px; margin: 0; padding-left: 22px; }
+.prescription-document-medications li { padding-left: 4px; color: #71808c; font-size: 12px; }
+.prescription-document-medications li strong, .prescription-document-medications li span { display: block; }
+.prescription-document-medications li strong { margin-bottom: 4px; color: #1d2933; font-size: 13px; }
+.prescription-document-instructions { padding: 15px 17px; border: 1px solid #e3e9ec; border-radius: 10px; color: #1d2933; background: #f8fafb; }
+.prescription-document-instructions strong { font-size: 11px; }
+.prescription-document-instructions p { margin: 7px 0 0; color: #53616c; font-size: 12px; line-height: 1.6; white-space: pre-wrap; }
 .invoice-title { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin: 31px 0 21px; }
 .invoice-title > div > span, .invoice-reference > div > span { color: #71808c; font-family: var(--font-data); font-size: 9px; letter-spacing: .08em; }
 .invoice-title h2 { margin: 7px 0 4px; color: #1d2933; font-family: var(--font-display); font-size: 26px; font-weight: 600; letter-spacing: -.05em; }
@@ -784,8 +807,8 @@ h1, h2, h3, p { margin-top: 0; }
 @page { margin: 14mm; }
 @media print {
   body * { visibility: hidden !important; }
-  .invoice-overlay, .invoice-overlay * { visibility: visible !important; }
-  .invoice-overlay { position: absolute !important; inset: 0 !important; display: block !important; overflow: visible !important; padding: 0 !important; background: #fff !important; backdrop-filter: none !important; }
+  .print-document-overlay, .print-document-overlay * { visibility: visible !important; }
+  .print-document-overlay { position: absolute !important; inset: 0 !important; display: block !important; overflow: visible !important; padding: 0 !important; background: #fff !important; backdrop-filter: none !important; }
   .invoice-card { width: 100% !important; max-height: none !important; overflow: visible !important; padding: 18px !important; border: 0 !important; border-radius: 0 !important; color: #1d2933 !important; background: #fff !important; box-shadow: none !important; }
   .invoice-close, .invoice-actions { display: none !important; }
 }
