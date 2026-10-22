@@ -349,6 +349,141 @@ function InsuranceSelect({ value, onChange, labelId }) {
   );
 }
 
+function InsuranceNameSelect({ value, onChange, options }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectRef = useRef(null);
+  const inputRef = useRef(null);
+  const listboxId = useId();
+  const query = value.trim();
+  const normalizedQuery = query.toLocaleLowerCase();
+  const filteredOptions = options.filter((option) => option.toLocaleLowerCase().includes(normalizedQuery));
+  const hasExactMatch = options.some((option) => option.toLocaleLowerCase() === normalizedQuery);
+
+  useEffect(() => {
+    const closeOnOutsideClick = (event) => {
+      if (selectRef.current && !selectRef.current.contains(event.target)) setIsOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    return () => document.removeEventListener("pointerdown", closeOnOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    selectRef.current?.querySelector('[role="option"][aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [isOpen]);
+
+  const focusOption = (event, direction) => {
+    event.preventDefault();
+    const optionButtons = Array.from(selectRef.current?.querySelectorAll('[role="option"]') ?? []);
+    const nextOption = optionButtons[optionButtons.indexOf(event.currentTarget) + direction];
+    nextOption?.focus();
+  };
+
+  const selectOption = (option) => {
+    onChange(option);
+    setIsOpen(false);
+    inputRef.current?.focus();
+  };
+
+  return (
+    <div className={`insurance-name-select patient-select${isOpen ? " patient-select--open" : ""}`} ref={selectRef}>
+      <div className="insurance-name-select__field">
+        <Search size={15} aria-hidden="true" />
+        <input
+          ref={inputRef}
+          type="text"
+          role="combobox"
+          aria-label="Nom de l’assurance"
+          aria-autocomplete="list"
+          aria-expanded={isOpen}
+          aria-controls={listboxId}
+          aria-haspopup="listbox"
+          autoComplete="off"
+          value={value}
+          onFocus={() => setIsOpen(true)}
+          onChange={(event) => {
+            onChange(event.target.value);
+            setIsOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setIsOpen(false);
+            } else if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setIsOpen(true);
+              selectRef.current?.querySelector('[role="option"]')?.focus();
+            } else if (event.key === "Enter") {
+              event.preventDefault();
+              const exactMatch = options.find((option) => option.toLocaleLowerCase() === normalizedQuery);
+              if (exactMatch) onChange(exactMatch);
+              setIsOpen(false);
+            }
+          }}
+          maxLength={120}
+          placeholder="Choisir ou saisir une assurance"
+          required
+        />
+        <ChevronDown className={`patient-select__chevron${isOpen ? " patient-select__chevron--open" : ""}`} size={15} aria-hidden="true" />
+      </div>
+      {isOpen && (
+        <div className="patient-select__menu insurance-name-select__menu">
+          <div className="patient-select__results" id={listboxId} role="listbox" aria-label="Assurances enregistrées">
+            {filteredOptions.map((option) => {
+              const isSelected = option.toLocaleLowerCase() === normalizedQuery;
+              return (
+                <button
+                  className={`patient-select__option${isSelected ? " patient-select__option--selected" : ""}`}
+                  type="button"
+                  role="option"
+                  aria-selected={isSelected}
+                  key={option}
+                  onClick={() => selectOption(option)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setIsOpen(false);
+                      inputRef.current?.focus();
+                    } else if (event.key === "ArrowDown") {
+                      focusOption(event, 1);
+                    } else if (event.key === "ArrowUp") {
+                      focusOption(event, -1);
+                    }
+                  }}
+                >
+                  <span className="patient-select__copy"><strong>{option}</strong></span>
+                  {isSelected && <Check className="patient-select__check" size={16} aria-hidden="true" />}
+                </button>
+              );
+            })}
+            {query && !hasExactMatch && (
+              <button
+                className="patient-select__option insurance-name-select__add"
+                type="button"
+                role="option"
+                aria-selected="false"
+                onClick={() => selectOption(query)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    setIsOpen(false);
+                    inputRef.current?.focus();
+                  } else if (event.key === "ArrowDown") {
+                    focusOption(event, 1);
+                  } else if (event.key === "ArrowUp") {
+                    focusOption(event, -1);
+                  }
+                }}
+              >
+                <span className="patient-select__copy"><strong>Utiliser « {query} »</strong><small>Ajouter ce nom d’assurance</small></span>
+                <Plus size={15} aria-hidden="true" />
+              </button>
+            )}
+            {!filteredOptions.length && !query && <p className="patient-select__empty" role="status">Saisissez un nom pour ajouter une assurance.</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BirthDateCalendarSelect({ label, value, options, onChange, className = "" }) {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef(null);
@@ -882,6 +1017,14 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
       city: patient.city,
     })),
   ], [patients]);
+  const insuranceOptions = useMemo(() => {
+    const uniqueNames = new Map();
+    patients.forEach((patient) => {
+      const insuranceName = patient.insurance_name?.trim();
+      if (insuranceName) uniqueNames.set(insuranceName.toLocaleLowerCase(), insuranceName);
+    });
+    return [...uniqueNames.values()].sort((left, right) => left.localeCompare(right, "fr"));
+  }, [patients]);
 
   const savePayment = async (event) => {
     event.preventDefault();
@@ -1631,7 +1774,11 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
               {form.insured === "true" && (
                 <div className="patient-insurance-fields">
                   <label>Nom de l’assurance
-                    <input value={form.insurance_name} onChange={(event) => setForm({ ...form, insurance_name: event.target.value })} maxLength={120} placeholder="Ex. Assurance Santé Plus" required />
+                    <InsuranceNameSelect
+                      value={form.insurance_name}
+                      onChange={(insurance_name) => setForm((current) => ({ ...current, insurance_name }))}
+                      options={insuranceOptions}
+                    />
                   </label>
                   <label>Taux de couverture (%)
                     <span className="patient-insurance-percentage">
