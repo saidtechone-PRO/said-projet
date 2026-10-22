@@ -49,6 +49,8 @@ create table if not exists public.patients (
   home_address text not null,
   city text not null,
   insured boolean not null default false,
+  insurance_name text not null default '',
+  insurance_percentage numeric(5,2) not null default 0,
   created_at timestamptz not null default now()
 );
 
@@ -59,10 +61,15 @@ alter table public.patients add column if not exists quartier text not null defa
 alter table public.patients add column if not exists home_address text not null default '';
 alter table public.patients add column if not exists city text not null default '';
 alter table public.patients add column if not exists insured boolean not null default false;
+alter table public.patients add column if not exists insurance_name text not null default '';
+alter table public.patients add column if not exists insurance_percentage numeric(5,2) not null default 0;
 
 alter table public.patients drop constraint if exists patients_age_range;
 alter table public.patients add constraint patients_age_range
   check (age is null or age between 0 and 130);
+alter table public.patients drop constraint if exists patients_insurance_percentage_range;
+alter table public.patients add constraint patients_insurance_percentage_range
+  check (insurance_percentage between 0 and 100);
 
 create index if not exists patients_user_created_at_idx
   on public.patients (user_id, created_at desc);
@@ -104,12 +111,39 @@ create table if not exists public.payments (
   patient_name text not null check (length(trim(patient_name)) > 0),
   service text not null check (length(trim(service)) > 0),
   amount bigint not null check (amount > 0),
+  total_amount bigint not null default 0,
   insured boolean not null default false,
+  insurance_name text not null default '',
+  insurance_percentage numeric(5,2) not null default 0,
+  insurance_covered_amount bigint not null default 0,
+  patient_due_amount bigint not null default 0,
   status text not null check (status in ('paid', 'partial')),
   practitioner text not null check (length(trim(practitioner)) > 0),
   occurred_at timestamptz not null,
   created_at timestamptz not null default now()
 );
+
+alter table public.payments add column if not exists total_amount bigint not null default 0;
+alter table public.payments add column if not exists insurance_name text not null default '';
+alter table public.payments add column if not exists insurance_percentage numeric(5,2) not null default 0;
+alter table public.payments add column if not exists insurance_covered_amount bigint not null default 0;
+alter table public.payments add column if not exists patient_due_amount bigint not null default 0;
+
+update public.payments
+set total_amount = amount,
+    patient_due_amount = amount
+where total_amount = 0;
+
+alter table public.payments drop constraint if exists payments_insurance_percentage_range;
+alter table public.payments add constraint payments_insurance_percentage_range
+  check (insurance_percentage between 0 and 100);
+alter table public.payments drop constraint if exists payments_amount_breakdown;
+alter table public.payments add constraint payments_amount_breakdown
+  check (
+    total_amount >= amount
+    and insurance_covered_amount between 0 and total_amount
+    and patient_due_amount between 0 and total_amount
+  );
 
 create index if not exists payments_user_occurred_at_idx
   on public.payments (user_id, occurred_at desc);

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { Activity, ArrowLeft, ArrowRight, CalendarDays, Check, ChevronDown, CircleDollarSign, ClipboardList, LayoutDashboard, LogOut, Mail, Pencil, Plus, Printer, Search, ShieldCheck, Stethoscope, Trash2, UsersRound, Wallet, X } from "lucide-react";
 import { requireSupabase } from "./lib/supabase";
 
-const emptyForm = { first_name: "", last_name: "", birth_date: "", age: "", contact: "", quartier: "", home_address: "", city: "", insured: "false" };
+const emptyForm = { first_name: "", last_name: "", birth_date: "", age: "", contact: "", quartier: "", home_address: "", city: "", insured: "false", insurance_name: "", insurance_percentage: "" };
 const emptyPrescriptionForm = {
   medications: [{ name: "", dosage: "", frequency: "", duration: "" }],
   instructions: "",
@@ -578,8 +578,8 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
   const [paymentForm, setPaymentForm] = useState({
     patient_id: "",
     service: "",
+    total_amount: "",
     amount: "",
-    insured: "false",
     status: "paid",
     practitioner: "",
     occurred_at: getLocalDateTimeValue(),
@@ -633,7 +633,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
     setError("");
     const { data, error: loadError } = await requireSupabase()
       .from("patients")
-      .select("id, full_name, birth_date, age, contact, quartier, home_address, city, insured, created_at")
+      .select("id, full_name, birth_date, age, contact, quartier, home_address, city, insured, insurance_name, insurance_percentage, created_at")
       .order("created_at", { ascending: false });
     if (loadError) {
       setError(loadError.message);
@@ -653,7 +653,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
     setPaymentError("");
     const { data, error: loadError } = await requireSupabase()
       .from("payments")
-      .select("id, patient_id, patient_name, service, amount, insured, status, practitioner, occurred_at, created_at")
+      .select("id, patient_id, patient_name, service, amount, total_amount, insured, insurance_name, insurance_percentage, insurance_covered_amount, patient_due_amount, status, practitioner, occurred_at, created_at")
       .order("occurred_at", { ascending: false });
     if (loadError) {
       setPaymentError(loadError.message);
@@ -743,6 +743,15 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
   }, [clinicalNotes]);
   const recentClinicalNotes = clinicalNotes.slice(0, 8);
   const selectedPatient = patients.find((patient) => patient.id === selectedPatientId) ?? null;
+  const paymentPatient = patients.find((patient) => patient.id === paymentForm.patient_id) ?? null;
+  const paymentTotalAmount = Number(paymentForm.total_amount);
+  const paymentInsurancePercentage = paymentPatient?.insured ? Number(paymentPatient.insurance_percentage ?? 0) : 0;
+  const paymentInsuranceCoveredAmount = paymentPatient?.insured && Number.isSafeInteger(paymentTotalAmount) && paymentTotalAmount > 0
+    ? Math.round(paymentTotalAmount * paymentInsurancePercentage / 100)
+    : 0;
+  const paymentPatientDueAmount = Number.isSafeInteger(paymentTotalAmount) && paymentTotalAmount > 0
+    ? paymentTotalAmount - paymentInsuranceCoveredAmount
+    : 0;
   const selectedPatientPayments = selectedPatient
     ? payments.filter((payment) => payment.patient_id === selectedPatient.id)
     : [];
@@ -764,8 +773,8 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
     setPaymentForm({
       patient_id: patientId,
       service: "",
+      total_amount: "",
       amount: "",
-      insured: "false",
       status: "paid",
       practitioner: "",
       occurred_at: getLocalDateTimeValue(),
@@ -882,9 +891,27 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
       setPaymentError("Sélectionnez un patient enregistré avant de créer le paiement.");
       return;
     }
+    const totalAmount = Number(paymentForm.total_amount);
+    if (!Number.isSafeInteger(totalAmount) || totalAmount <= 0) {
+      setPaymentError("Saisissez un tarif total entier supérieur à zéro, en GNF.");
+      return;
+    }
     const amount = Number(paymentForm.amount);
-    if (!Number.isSafeInteger(amount) || amount <= 0) {
-      setPaymentError("Saisissez un montant entier supérieur à zéro, en GNF.");
+    if (!Number.isSafeInteger(amount) || amount <= 0 || amount > totalAmount) {
+      setPaymentError("Le montant encaissé doit être un montant entier positif qui ne dépasse pas le tarif total.");
+      return;
+    }
+    const insurancePercentage = patient.insured ? Number(patient.insurance_percentage ?? 0) : 0;
+    if (patient.insured && (!patient.insurance_name?.trim() || !Number.isFinite(insurancePercentage) || insurancePercentage < 0 || insurancePercentage > 100)) {
+      setPaymentError("Complétez le nom et le taux de l’assurance dans la fiche du patient avant d’enregistrer ce paiement.");
+      return;
+    }
+    if (paymentForm.status === "paid" && amount !== totalAmount) {
+      setPaymentError("Pour un règlement marqué payé, le montant encaissé doit correspondre au tarif total.");
+      return;
+    }
+    if (paymentForm.status === "partial" && amount >= totalAmount) {
+      setPaymentError("Sélectionnez « Payé » lorsque le tarif total a été encaissé.");
       return;
     }
     const occurredAt = new Date(paymentForm.occurred_at);
@@ -899,7 +926,12 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
       patient_name: patient.full_name,
       service: paymentForm.service,
       amount,
-      insured: paymentForm.insured === "true",
+      total_amount: totalAmount,
+      insured: Boolean(patient.insured),
+      insurance_name: patient.insured ? patient.insurance_name.trim() : "",
+      insurance_percentage: insurancePercentage,
+      insurance_covered_amount: Math.round(totalAmount * insurancePercentage / 100),
+      patient_due_amount: totalAmount - Math.round(totalAmount * insurancePercentage / 100),
       status: paymentForm.status,
       practitioner: paymentForm.practitioner.trim(),
       occurred_at: occurredAt.toISOString(),
@@ -911,7 +943,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
       const { data, error: saveError } = await requireSupabase()
         .from("payments")
         .insert({ ...details, user_id: user.id })
-        .select("id, patient_id, patient_name, service, amount, insured, status, practitioner, occurred_at, created_at")
+        .select("id, patient_id, patient_name, service, amount, total_amount, insured, insurance_name, insurance_percentage, insurance_covered_amount, patient_due_amount, status, practitioner, occurred_at, created_at")
         .single();
       if (saveError) {
         setPaymentError(saveError.message);
@@ -1009,6 +1041,8 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
       home_address: patient.home_address ?? "",
       city: patient.city ?? "",
       insured: patient.insured ? "true" : "false",
+      insurance_name: patient.insurance_name ?? "",
+      insurance_percentage: patient.insurance_percentage?.toString() ?? "",
     });
     setSelectedPatientId(null);
     setIsFormOpen(true);
@@ -1026,6 +1060,15 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
       setError("Renseignez la date de naissance pour calculer l’âge du patient.");
       return;
     }
+    const insurancePercentage = form.insured === "true" ? Number(form.insurance_percentage) : 0;
+    if (form.insured === "true" && !form.insurance_name.trim()) {
+      setError("Renseignez le nom de l’assurance du patient.");
+      return;
+    }
+    if (form.insured === "true" && (!form.insurance_percentage.trim() || !Number.isFinite(insurancePercentage) || insurancePercentage < 0 || insurancePercentage > 100)) {
+      setError("Le taux de couverture doit être compris entre 0 et 100 %.");
+      return;
+    }
     setIsSaving(true);
     const details = {
       full_name: `${form.first_name.trim()} ${form.last_name.trim()}`.trim(),
@@ -1038,6 +1081,8 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
         : "",
       city: form.city.trim(),
       insured: form.insured === "true",
+      insurance_name: form.insured === "true" ? form.insurance_name.trim() : "",
+      insurance_percentage: insurancePercentage,
     };
 
     let data;
@@ -1050,8 +1095,8 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
     } else {
       const query = requireSupabase().from("patients");
       const { data: savedPatient, error: saveError } = editingPatientId
-        ? await query.update(details).eq("id", editingPatientId).select("id, full_name, birth_date, age, contact, quartier, home_address, city, insured, created_at").single()
-        : await query.insert({ ...details, user_id: user.id }).select("id, full_name, birth_date, age, contact, quartier, home_address, city, insured, created_at").single();
+        ? await query.update(details).eq("id", editingPatientId).select("id, full_name, birth_date, age, contact, quartier, home_address, city, insured, insurance_name, insurance_percentage, created_at").single()
+        : await query.insert({ ...details, user_id: user.id }).select("id, full_name, birth_date, age, contact, quartier, home_address, city, insured, insurance_name, insurance_percentage, created_at").single();
 
       if (saveError) {
         setError(saveError.message);
@@ -1423,15 +1468,17 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
               ) : (
                 <div className="patients-table-wrap">
                   <table className="patients-table payments-table">
-                    <thead><tr><th>Date / heure</th><th>Patient</th><th>Prestation</th><th>Montant encaissé</th><th>Assurance</th><th>Statut</th><th>Praticien</th><th>Facture</th></tr></thead>
+                    <thead><tr><th>Date / heure</th><th>Patient</th><th>Prestation</th><th>Tarif total</th><th>Part assurance</th><th>Montant encaissé</th><th>Assurance</th><th>Statut</th><th>Praticien</th><th>Facture</th></tr></thead>
                     <tbody>
                       {filteredPayments.map((payment) => (
                         <tr key={payment.id}>
                           <td>{new Intl.DateTimeFormat("fr-GN", { dateStyle: "short", timeStyle: "short" }).format(new Date(payment.occurred_at))}</td>
                           <td><strong>{payment.patient_name}</strong></td>
                           <td>{payment.service}</td>
+                          <td className="payments-table__amount">{formatAmount(payment.total_amount || payment.amount)} GNF</td>
+                          <td className="payments-table__amount">{formatAmount(payment.insurance_covered_amount ?? 0)} GNF</td>
                           <td className="payments-table__amount">{formatAmount(payment.amount)} GNF</td>
-                          <td><span className={payment.insured ? "payment-tag payment-tag--insured" : "payment-tag"}>{payment.insured ? "Assuré(e)" : "Non assuré(e)"}</span></td>
+                          <td><span className={payment.insured ? "payment-tag payment-tag--insured" : "payment-tag"}>{payment.insured ? `${payment.insurance_name || "Assuré(e)"}${payment.insurance_percentage ? ` · ${Number(payment.insurance_percentage)} %` : ""}` : "Non assuré(e)"}</span></td>
                           <td><span className={payment.status === "partial" ? "payment-tag payment-tag--partial" : "payment-tag payment-tag--paid"}>{payment.status === "partial" ? "Partiel" : "Payé"}</span></td>
                           <td>{payment.practitioner}</td>
                           <td className="patients-row-actions"><button type="button" aria-label={`Imprimer la facture de ${payment.patient_name}`} onClick={() => printInvoice(payment)}><Printer size={15} /></button></td>
@@ -1487,6 +1534,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                 <div><dt>Téléphone</dt><dd>{selectedPatient.contact || "Non renseigné"}</dd></div>
                 <div><dt>Ville</dt><dd>{selectedPatient.city || "Non renseignée"}</dd></div>
                 <div><dt>Quartier</dt><dd>{selectedPatient.quartier || "Non renseigné"}</dd></div>
+                <div className="patient-record-details__wide"><dt>Assurance</dt><dd>{selectedPatient.insured ? `${selectedPatient.insurance_name || "Assurance non renseignée"} · ${Number(selectedPatient.insurance_percentage ?? 0)} %` : "Non assuré(e)"}</dd></div>
               </dl>
             </section>
             <section className="patient-record-section" aria-labelledby="patient-notes-heading">
@@ -1569,8 +1617,30 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
               </div>
               <div className="payment-select-label patient-form-insurance">
                 <span id="patient-insurance-label">Assurance</span>
-                <InsuranceSelect value={form.insured} onChange={(insured) => setForm({ ...form, insured })} labelId="patient-insurance-label" />
+                <InsuranceSelect
+                  value={form.insured}
+                  onChange={(insured) => setForm((current) => ({
+                    ...current,
+                    insured,
+                    insurance_name: insured === "true" ? current.insurance_name : "",
+                    insurance_percentage: insured === "true" ? current.insurance_percentage : "",
+                  }))}
+                  labelId="patient-insurance-label"
+                />
               </div>
+              {form.insured === "true" && (
+                <div className="patient-insurance-fields">
+                  <label>Nom de l’assurance
+                    <input value={form.insurance_name} onChange={(event) => setForm({ ...form, insurance_name: event.target.value })} maxLength={120} placeholder="Ex. Assurance Santé Plus" required />
+                  </label>
+                  <label>Taux de couverture (%)
+                    <span className="patient-insurance-percentage">
+                      <input type="number" inputMode="decimal" min="0" max="100" step="0.01" value={form.insurance_percentage} onChange={(event) => setForm({ ...form, insurance_percentage: event.target.value })} placeholder="Ex. 80" required />
+                      <span>%</span>
+                    </span>
+                  </label>
+                </div>
+              )}
               <p className="patient-age-help" id="patient-age-help">L’âge est calculé automatiquement à partir de la date de naissance.</p>
               {error && <p className="patients-error" role="alert">{error}</p>}
               <div className="patients-form-actions">
@@ -1684,17 +1754,8 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                     <ChevronDown size={15} className="payment-select-icon" />
                   </div>
                 </label>
-                <label>Montant encaissé (GNF)
-                  <input type="number" inputMode="numeric" min="1" step="1" value={paymentForm.amount} onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })} placeholder="Ex. 150000" required />
-                </label>
-                <label className="payment-select-label">Assurance
-                  <div className="payment-select-wrap">
-                    <select value={paymentForm.insured} onChange={(event) => setPaymentForm({ ...paymentForm, insured: event.target.value })} required>
-                      <option value="false">Non assuré(e)</option>
-                      <option value="true">Assuré(e)</option>
-                    </select>
-                    <ChevronDown size={15} className="payment-select-icon" />
-                  </div>
+                <label>Tarif total de la prestation (GNF)
+                  <input type="number" inputMode="numeric" min="1" step="1" value={paymentForm.total_amount} onChange={(event) => setPaymentForm({ ...paymentForm, total_amount: event.target.value })} placeholder="Ex. 150000" required />
                 </label>
                 <label className="payment-select-label">Statut du règlement
                   <div className="payment-select-wrap">
@@ -1705,6 +1766,9 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                     <ChevronDown size={15} className="payment-select-icon" />
                   </div>
                 </label>
+                <label>Montant total encaissé (GNF)
+                  <input type="number" inputMode="numeric" min="1" step="1" max={paymentForm.total_amount || undefined} value={paymentForm.amount} onChange={(event) => setPaymentForm({ ...paymentForm, amount: event.target.value })} placeholder="Somme effectivement reçue" required />
+                </label>
                 <label>Praticien
                   <input autoComplete="name" value={paymentForm.practitioner} onChange={(event) => setPaymentForm({ ...paymentForm, practitioner: event.target.value })} maxLength={150} placeholder="Nom du praticien" required />
                 </label>
@@ -1712,8 +1776,18 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                   <input type="datetime-local" value={paymentForm.occurred_at} onChange={(event) => setPaymentForm({ ...paymentForm, occurred_at: event.target.value })} required />
                 </label>
               </div>
+              {paymentPatient && (
+                <div className="payment-insurance-breakdown" aria-live="polite">
+                  <div className="payment-insurance-breakdown__heading">
+                    <strong>{paymentPatient.insured ? paymentPatient.insurance_name || "Assurance à compléter" : "Patient non assuré(e)"}</strong>
+                    {paymentPatient.insured && <span>{paymentInsurancePercentage} %</span>}
+                  </div>
+                  <div><span>Part prise en charge par l’assurance</span><strong>{formatAmount(paymentInsuranceCoveredAmount)} GNF</strong></div>
+                  <div><span>Reste à charge du patient</span><strong>{formatAmount(paymentPatientDueAmount)} GNF</strong></div>
+                </div>
+              )}
               {paymentError && <p className="patients-error" role="alert">{paymentError}</p>}
-              <div className="payments-form-hint"><ShieldCheck size={15} /><span>Le montant saisi correspond à la somme encaissée. Les données sont réservées à votre établissement.</span></div>
+              <div className="payments-form-hint"><ShieldCheck size={15} /><span>La part d’assurance est calculée selon la couverture enregistrée sur la fiche du patient. Le montant encaissé est le total réellement reçu. Les données sont réservées à votre établissement.</span></div>
               <div className="patients-form-actions">
                 <button className="patients-cancel" type="button" onClick={closePaymentForm}>Annuler</button>
                 <button className="button button--primary" type="submit" disabled={isPaymentSaving}>{isPaymentSaving ? "Enregistrement…" : "Enregistrer le paiement"}</button>
@@ -1743,7 +1817,14 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
               <div><span>Patient</span><strong>{selectedInvoice.patient_name}</strong></div>
               <div><span>Prestation</span><strong>{selectedInvoice.service}</strong></div>
               <div><span>Praticien</span><strong>{selectedInvoice.practitioner}</strong></div>
-              <div><span>Assurance</span><strong>{selectedInvoice.insured ? "Assuré(e)" : "Non assuré(e)"}</strong></div>
+              <div><span>Assurance</span><strong>{selectedInvoice.insured ? `${selectedInvoice.insurance_name || "Assuré(e)"}${selectedInvoice.insurance_percentage ? ` · ${Number(selectedInvoice.insurance_percentage)} %` : ""}` : "Non assuré(e)"}</strong></div>
+              {(selectedInvoice.total_amount > 0) && (
+                <>
+                  <div><span>Tarif total</span><strong>{formatAmount(selectedInvoice.total_amount)} GNF</strong></div>
+                  <div><span>Part assurance</span><strong>{formatAmount(selectedInvoice.insurance_covered_amount ?? 0)} GNF</strong></div>
+                  <div><span>Reste à charge patient</span><strong>{formatAmount(selectedInvoice.patient_due_amount ?? selectedInvoice.total_amount)} GNF</strong></div>
+                </>
+              )}
             </div>
             <div className="invoice-total"><span>Montant encaissé</span><strong>{formatAmount(selectedInvoice.amount)} <small>GNF</small></strong></div>
             <footer className="invoice-footer">Document généré par Clinic DC · {user.email}</footer>

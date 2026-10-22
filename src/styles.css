@@ -1574,7 +1574,16 @@ h1, h2, h3, p { margin-top: 0; }
 .patient-form-columns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; }
 .patient-form-column { display: flex; min-width: 0; flex-direction: column; gap: 16px; }
 .patient-form-insurance { width: 100%; }
+.patient-insurance-fields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 15px 13px; }
+.patient-insurance-percentage { display: flex; align-items: center; gap: 10px; }
+.patient-insurance-percentage > span { color: #9ce5d7; font-size: 13px; font-weight: 600; }
 .insurance-select .patient-select__option { min-height: 62px; }
+.payment-insurance-breakdown { display: grid; grid-column: 1 / -1; gap: 10px; padding: 14px 15px; border: 1px solid rgba(143,226,212,.18); border-radius: 11px; background: linear-gradient(110deg,rgba(75,186,169,.09),rgba(255,255,255,.025)); }
+.payment-insurance-breakdown > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #aeb9c7; font-size: 11px; }
+.payment-insurance-breakdown > div > strong { color: #e8edf1; font-size: 12px; font-weight: 600; text-align: right; }
+.payment-insurance-breakdown__heading { padding-bottom: 8px; border-bottom: 1px solid rgba(196,211,235,.1); }
+.payment-insurance-breakdown__heading > strong { color: #91e0d2 !important; }
+.payment-insurance-breakdown__heading > span { flex: 0 0 auto; padding: 3px 8px; border: 1px solid rgba(143,226,212,.2); border-radius: 99px; color: #9ce5d7; background: rgba(75,186,169,.1); font-size: 10px; }
 .patient-phone-input { display: flex; height: 47px; align-items: center; overflow: hidden; border: 1px solid rgba(196,211,235,.16); border-radius: 10px; background: rgba(7,14,24,.36); transition: border-color .2s,box-shadow .2s; }
 .patient-phone-input:focus-within { border-color: rgba(109,224,207,.76); box-shadow: 0 0 0 3px rgba(79,202,185,.12); }
 .patient-phone-input > span { align-self: stretch; display: flex; align-items: center; padding: 0 12px; border-right: 1px solid rgba(196,211,235,.13); color: #9ce5d7; font-size: 13px; font-weight: 600; }
@@ -1586,6 +1595,7 @@ h1, h2, h3, p { margin-top: 0; }
 @media (max-width: 560px) {
   .patient-edit-form-card { padding: 30px 22px 23px; }
   .patient-form-columns { grid-template-columns: 1fr; gap: 16px; }
+  .patient-insurance-fields { grid-template-columns: 1fr; }
 }
 
 .birth-date-picker { position: relative; z-index: 2; }
