@@ -29,7 +29,9 @@ Depuis la connexion, **Mot de passe oublié ?** envoie un lien de réinitialisat
 
 Après connexion, ouvrez **Espace médecin** pour consulter les consultations du jour, retrouver les dossiers patients, les ordonnances récentes et les notes médicales. Une consultation enregistrée comprend son motif, les observations médicales, le praticien et sa date; elle est conservée dans le dossier du patient. Le répertoire permet aussi de rechercher un patient et d'ouvrir sa fiche. La date de naissance sert à calculer automatiquement l'âge et sa catégorie : Enfant (moins de 12 ans), Ado (12 à 17 ans) ou Adulte (18 ans et plus). Depuis la fiche, vous pouvez modifier ses coordonnées, créer une consultation, enregistrer un paiement ou créer une ordonnance avec un ou plusieurs médicaments, leur posologie, fréquence et durée ainsi que des instructions complémentaires.
 
-Le même script crée la table `clinical_notes` et ses politiques RLS. Les tables `patients`, `payments`, `prescriptions` et `clinical_notes` limitent les accès aux données du compte connecté.
+Le même script crée les tables `clinical_notes` et `appointments` et leurs politiques RLS. Les tables `patients`, `payments`, `prescriptions`, `clinical_notes` et `appointments` limitent les accès aux données du compte connecté.
+
+L’onglet **Agenda** permet de créer un rendez-vous associé à un patient, avec motif, praticien, début, fin et notes facultatives. L’agenda est filtrable par date; un rendez-vous peut être marqué terminé, absent ou annulé. Un créneau qui chevauche un rendez-vous programmé du même praticien ou du même patient est refusé. Les rappels automatiques ne sont pas encore activés.
 
 Les informations de santé, y compris les notes de consultation, sont sensibles. Configurez soigneusement l'accès aux comptes et ne partagez pas les identifiants. L'accès aux notes et ordonnances est limité au compte de l'établissement par les politiques RLS.
 

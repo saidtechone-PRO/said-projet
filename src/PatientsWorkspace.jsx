@@ -16,6 +16,19 @@ const emptyClinicalNoteForm = {
   practitioner: "",
   occurred_at: getLocalDateTimeValue(),
 };
+function createAppointmentForm() {
+  const startsAt = new Date();
+  startsAt.setMinutes(Math.floor(startsAt.getMinutes() / 15) * 15 + 15, 0, 0);
+  const endsAt = new Date(startsAt.getTime() + 30 * 60_000);
+  return {
+    patient_id: "",
+    reason: "Consultation générale",
+    practitioner: "",
+    starts_at: getLocalDateTimeValue(startsAt),
+    ends_at: getLocalDateTimeValue(endsAt),
+    notes: "",
+  };
+}
 const services = [
   { label: "Consultation générale", icon: "🩺" },
   { label: "Consultation spécialisée", icon: "🧑‍⚕️" },
@@ -73,6 +86,13 @@ function getPaymentStatusLabel(status, insuranceName = "") {
   if (status === "partial") return "Paiement partiel";
   if (status === "insurance_pending") return `Reste à payer par ${insuranceName || "l’assurance"}`;
   return "Payé";
+}
+
+function getAppointmentStatusLabel(status) {
+  if (status === "completed") return "Terminé";
+  if (status === "cancelled") return "Annulé";
+  if (status === "no_show") return "Absent";
+  return "Programmé";
 }
 
 function getExpectedPatientPayment(totalAmount, patient) {
@@ -748,10 +768,13 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
   const [payments, setPayments] = useState([]);
   const [prescriptions, setPrescriptions] = useState([]);
   const [clinicalNotes, setClinicalNotes] = useState([]);
+  const [appointments, setAppointments] = useState([]);
   const [insuranceProviders, setInsuranceProviders] = useState([]);
   const [search, setSearch] = useState("");
   const [paymentSearch, setPaymentSearch] = useState("");
   const [activeView, setActiveView] = useState("dashboard");
+  const [selectedAgendaDate, setSelectedAgendaDate] = useState(() => getLocalDateKey(new Date()));
+  const [appointmentForm, setAppointmentForm] = useState(createAppointmentForm);
   const [form, setForm] = useState(emptyForm);
   const [paymentForm, setPaymentForm] = useState({
     patient_id: "",
@@ -772,6 +795,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
   const [isPaymentFormOpen, setIsPaymentFormOpen] = useState(false);
   const [isPrescriptionFormOpen, setIsPrescriptionFormOpen] = useState(false);
   const [isClinicalNoteFormOpen, setIsClinicalNoteFormOpen] = useState(false);
+  const [isAppointmentFormOpen, setIsAppointmentFormOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [selectedPrescription, setSelectedPrescription] = useState(null);
   const [establishmentProfile, setEstablishmentProfile] = useState(null);
@@ -780,6 +804,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
   const [isPaymentsLoading, setIsPaymentsLoading] = useState(!isDemo);
   const [isPrescriptionsLoading, setIsPrescriptionsLoading] = useState(!isDemo);
   const [areClinicalNotesLoading, setAreClinicalNotesLoading] = useState(!isDemo);
+  const [areAppointmentsLoading, setAreAppointmentsLoading] = useState(!isDemo);
   const [isSaving, setIsSaving] = useState(false);
   const [isPaymentSaving, setIsPaymentSaving] = useState(false);
   const [isPrescriptionSaving, setIsPrescriptionSaving] = useState(false);
@@ -791,6 +816,9 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
   const [paymentError, setPaymentError] = useState("");
   const [prescriptionError, setPrescriptionError] = useState("");
   const [clinicalNoteError, setClinicalNoteError] = useState("");
+  const [appointmentError, setAppointmentError] = useState("");
+  const [isAppointmentSaving, setIsAppointmentSaving] = useState(false);
+  const [updatingAppointmentId, setUpdatingAppointmentId] = useState(null);
   const [signOutError, setSignOutError] = useState("");
 
   useEffect(() => {
@@ -800,6 +828,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
       || isPaymentFormOpen
       || isPrescriptionFormOpen
       || isClinicalNoteFormOpen
+      || isAppointmentFormOpen
       || selectedInvoice
       || selectedPrescription,
     );
@@ -810,7 +839,7 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
     return () => {
       document.body.style.overflow = previousOverflow;
     };
-  }, [selectedPatientId, isFormOpen, isPaymentFormOpen, isPrescriptionFormOpen, isClinicalNoteFormOpen, selectedInvoice, selectedPrescription]);
+  }, [selectedPatientId, isFormOpen, isPaymentFormOpen, isPrescriptionFormOpen, isClinicalNoteFormOpen, isAppointmentFormOpen, selectedInvoice, selectedPrescription]);
 
   const loadPatients = useCallback(async () => {
     if (isDemo) return;
@@ -928,6 +957,26 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
     loadClinicalNotes();
   }, [loadClinicalNotes]);
 
+  const loadAppointments = useCallback(async () => {
+    if (isDemo) return;
+    setAppointmentError("");
+    const { data, error: loadError } = await requireSupabase()
+      .from("appointments")
+      .select("id, patient_id, patient_name, reason, practitioner, starts_at, ends_at, notes, status, created_at")
+      .order("starts_at", { ascending: true });
+    if (loadError) {
+      setAppointmentError(loadError.message);
+      setAreAppointmentsLoading(false);
+      return;
+    }
+    setAppointments(data ?? []);
+    setAreAppointmentsLoading(false);
+  }, [isDemo]);
+
+  useEffect(() => {
+    loadAppointments();
+  }, [loadAppointments]);
+
   const filteredPatients = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     if (!query) return patients;
@@ -961,6 +1010,16 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
     const today = getLocalDateKey(new Date());
     return clinicalNotes.filter((note) => getLocalDateKey(new Date(note.occurred_at)) === today);
   }, [clinicalNotes]);
+  const todayAppointments = useMemo(() => {
+    const today = getLocalDateKey(new Date());
+    return appointments.filter((appointment) => (
+      getLocalDateKey(new Date(appointment.starts_at)) === today
+      && appointment.status !== "cancelled"
+    ));
+  }, [appointments]);
+  const agendaAppointments = useMemo(() => appointments
+    .filter((appointment) => getLocalDateKey(new Date(appointment.starts_at)) === selectedAgendaDate)
+    .sort((left, right) => new Date(left.starts_at).getTime() - new Date(right.starts_at).getTime()), [appointments, selectedAgendaDate]);
   const recentClinicalNotes = clinicalNotes.slice(0, 8);
   const selectedPatient = patients.find((patient) => patient.id === selectedPatientId) ?? null;
   const paymentPatient = patients.find((patient) => patient.id === paymentForm.patient_id) ?? null;
@@ -1020,6 +1079,118 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
     setClinicalNoteError("");
     setClinicalNoteForm({ ...emptyClinicalNoteForm, patient_id: patientId, occurred_at: getLocalDateTimeValue() });
     setIsClinicalNoteFormOpen(true);
+  };
+
+  const openAppointmentForm = (patientId = "") => {
+    setAppointmentError("");
+    setAppointmentForm({ ...createAppointmentForm(), patient_id: patientId });
+    setIsAppointmentFormOpen(true);
+  };
+
+  const closeAppointmentForm = () => {
+    if (isAppointmentSaving) return;
+    setIsAppointmentFormOpen(false);
+    setAppointmentError("");
+  };
+
+  const saveAppointment = async (event) => {
+    event.preventDefault();
+    setAppointmentError("");
+    const patient = patients.find((item) => item.id === appointmentForm.patient_id);
+    if (!patient) {
+      setAppointmentError("Sélectionnez un patient enregistré pour ce rendez-vous.");
+      return;
+    }
+    const startsAt = new Date(appointmentForm.starts_at);
+    const endsAt = new Date(appointmentForm.ends_at);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) {
+      setAppointmentError("L’heure de fin doit être postérieure à l’heure de début.");
+      return;
+    }
+    if (startsAt.getTime() < Date.now()) {
+      setAppointmentError("Choisissez une date et une heure futures pour le rendez-vous.");
+      return;
+    }
+    const practitioner = appointmentForm.practitioner.trim();
+    const overlap = appointments.find((appointment) => (
+      appointment.status === "scheduled"
+      && new Date(appointment.starts_at) < endsAt
+      && new Date(appointment.ends_at) > startsAt
+      && (
+        appointment.patient_id === patient.id
+        || appointment.practitioner.trim().toLocaleLowerCase() === practitioner.toLocaleLowerCase()
+      )
+    ));
+    if (overlap) {
+      setAppointmentError(overlap.patient_id === patient.id
+        ? "Ce patient a déjà un rendez-vous sur ce créneau."
+        : `Dr ${overlap.practitioner} a déjà un rendez-vous sur ce créneau.`);
+      return;
+    }
+
+    const details = {
+      patient_id: patient.id,
+      patient_name: patient.full_name,
+      reason: appointmentForm.reason.trim(),
+      practitioner,
+      starts_at: startsAt.toISOString(),
+      ends_at: endsAt.toISOString(),
+      notes: appointmentForm.notes.trim(),
+      status: "scheduled",
+    };
+    if (!details.reason || !details.practitioner) {
+      setAppointmentError("Renseignez le motif du rendez-vous et le nom du praticien.");
+      return;
+    }
+
+    setIsAppointmentSaving(true);
+    let savedAppointment;
+    if (isDemo) {
+      savedAppointment = { ...details, id: `demo-appointment-${Date.now()}`, created_at: new Date().toISOString() };
+    } else {
+      const { data, error: saveError } = await requireSupabase()
+        .from("appointments")
+        .insert({ ...details, user_id: user.id })
+        .select("id, patient_id, patient_name, reason, practitioner, starts_at, ends_at, notes, status, created_at")
+        .single();
+      if (saveError) {
+        setAppointmentError(saveError.message);
+        setIsAppointmentSaving(false);
+        return;
+      }
+      savedAppointment = data;
+    }
+    setAppointments((current) => [...current, savedAppointment].sort((left, right) => (
+      new Date(left.starts_at).getTime() - new Date(right.starts_at).getTime()
+    )));
+    setSelectedAgendaDate(getLocalDateKey(startsAt));
+    setActiveView("appointments");
+    setIsAppointmentSaving(false);
+    setIsAppointmentFormOpen(false);
+    setAppointmentForm(createAppointmentForm());
+  };
+
+  const updateAppointmentStatus = async (appointment, status) => {
+    setAppointmentError("");
+    setUpdatingAppointmentId(appointment.id);
+    if (isDemo) {
+      setAppointments((current) => current.map((item) => item.id === appointment.id ? { ...item, status } : item));
+      setUpdatingAppointmentId(null);
+      return;
+    }
+    const { data, error: updateError } = await requireSupabase()
+      .from("appointments")
+      .update({ status })
+      .eq("id", appointment.id)
+      .select("id, patient_id, patient_name, reason, practitioner, starts_at, ends_at, notes, status, created_at")
+      .single();
+    if (updateError) {
+      setAppointmentError(updateError.message);
+      setUpdatingAppointmentId(null);
+      return;
+    }
+    setAppointments((current) => current.map((item) => item.id === appointment.id ? data : item));
+    setUpdatingAppointmentId(null);
   };
 
   const closeClinicalNoteForm = () => {
@@ -1477,6 +1648,9 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
           <button className={activeView === "patients" ? "workspace-nav__item workspace-nav__item--active" : "workspace-nav__item"} type="button" onClick={() => setActiveView("patients")}>
             <UsersRound size={16} /> Patients <span>{patients.length}</span>
           </button>
+          <button className={activeView === "appointments" ? "workspace-nav__item workspace-nav__item--active" : "workspace-nav__item"} type="button" onClick={() => setActiveView("appointments")}>
+            <CalendarDays size={16} /> Agenda <span>{todayAppointments.length}</span>
+          </button>
           <button className={activeView === "payments" ? "workspace-nav__item workspace-nav__item--active" : "workspace-nav__item"} type="button" onClick={() => setActiveView("payments")}>
             <Wallet size={16} /> Paiements <span>{payments.length}</span>
           </button>
@@ -1515,11 +1689,11 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                 <strong>{isLoading ? "…" : patients.length}</strong>
                 <button type="button" onClick={() => setActiveView("patients")}>Ouvrir le répertoire <ArrowRight size={14} /></button>
               </article>
-              <article className="dashboard-metric dashboard-metric--muted">
+              <article className="dashboard-metric">
                 <span className="dashboard-metric__icon"><CalendarDays size={19} /></span>
-                <span className="dashboard-metric__label">Rendez-vous</span>
-                <strong>À venir</strong>
-                <small>Le module agenda sera ajouté ensuite.</small>
+                <span className="dashboard-metric__label">Rendez-vous aujourd’hui</span>
+                <strong>{areAppointmentsLoading ? "…" : todayAppointments.length}</strong>
+                <button type="button" onClick={() => setActiveView("appointments")}>Ouvrir l’agenda <ArrowRight size={14} /></button>
               </article>
               <article className="dashboard-metric dashboard-metric--muted">
                 <span className="dashboard-metric__icon"><Activity size={19} /></span>
@@ -1725,6 +1899,68 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
                 )}
               </section>
             </div>
+          </>
+        ) : activeView === "appointments" ? (
+          <>
+            <div className="patients-heading">
+              <div>
+                <span className="eyebrow">ORGANISATION DES SOINS</span>
+                <h1>Agenda.</h1>
+                <p>Planifiez et suivez les rendez-vous de votre établissement.</p>
+              </div>
+              <button className="button button--primary patients-add" type="button" onClick={() => openAppointmentForm()} disabled={patients.length === 0}>
+                <Plus size={17} /> Nouveau rendez-vous
+              </button>
+            </div>
+            {appointmentError && !isAppointmentFormOpen && <p className="patients-error" role="alert">{appointmentError}</p>}
+            <section className="patients-list-card appointments-card" aria-labelledby="agenda-list-heading">
+              <div className="patients-list-heading">
+                <div>
+                  <h2 id="agenda-list-heading">Rendez-vous du jour</h2>
+                  <p>{agendaAppointments.filter((appointment) => appointment.status === "scheduled").length} rendez-vous programmés</p>
+                </div>
+                <label className="agenda-date-picker">Date
+                  <input type="date" value={selectedAgendaDate} onChange={(event) => setSelectedAgendaDate(event.target.value)} />
+                </label>
+              </div>
+              {areAppointmentsLoading ? (
+                <p className="patients-empty">Chargement de l’agenda…</p>
+              ) : patients.length === 0 ? (
+                <div className="patients-empty"><strong>Ajoutez d’abord un patient</strong><span>Un rendez-vous doit être associé à un patient enregistré.</span><button className="dashboard-view-all" type="button" onClick={openNewPatientForm}><Plus size={14} /> Nouveau patient</button></div>
+              ) : agendaAppointments.length === 0 ? (
+                <div className="patients-empty">
+                  <span className="patients-empty__icon"><CalendarDays size={22} /></span>
+                  <strong>Aucun rendez-vous pour cette date</strong>
+                  <span>Sélectionnez un autre jour ou planifiez un rendez-vous.</span>
+                  <button className="dashboard-view-all" type="button" onClick={() => openAppointmentForm()}><Plus size={14} /> Nouveau rendez-vous</button>
+                </div>
+              ) : (
+                <div className="appointments-list">
+                  {agendaAppointments.map((appointment) => (
+                    <article className={`appointment-row appointment-row--${appointment.status}`} key={appointment.id}>
+                      <div className="appointment-row__time">
+                        <strong>{new Intl.DateTimeFormat("fr-GN", { timeStyle: "short" }).format(new Date(appointment.starts_at))}</strong>
+                        <span>{new Intl.DateTimeFormat("fr-GN", { timeStyle: "short" }).format(new Date(appointment.ends_at))}</span>
+                      </div>
+                      <div className="appointment-row__details">
+                        <strong>{appointment.patient_name}</strong>
+                        <span>{appointment.reason}</span>
+                        <small>Dr {appointment.practitioner}</small>
+                        {appointment.notes && <p>{appointment.notes}</p>}
+                      </div>
+                      <span className={`payment-tag appointment-status appointment-status--${appointment.status}`}>{getAppointmentStatusLabel(appointment.status)}</span>
+                      {appointment.status === "scheduled" && (
+                        <div className="appointment-row__actions">
+                          <button type="button" disabled={updatingAppointmentId === appointment.id} onClick={() => updateAppointmentStatus(appointment, "completed")}>Terminé</button>
+                          <button type="button" disabled={updatingAppointmentId === appointment.id} onClick={() => updateAppointmentStatus(appointment, "no_show")}>Absent</button>
+                          <button type="button" disabled={updatingAppointmentId === appointment.id} onClick={() => updateAppointmentStatus(appointment, "cancelled")}>Annuler</button>
+                        </div>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
           </>
         ) : (
           <>
@@ -2030,6 +2266,50 @@ export default function PatientsWorkspace({ user, onSignOut, isDemo = false }) {
               <div className="patients-form-actions">
                 <button className="patients-cancel" type="button" disabled={isClinicalNoteSaving} onClick={closeClinicalNoteForm}>Annuler</button>
                 <button className="button button--primary" type="submit" disabled={isClinicalNoteSaving}>{isClinicalNoteSaving ? "Enregistrement…" : "Enregistrer la consultation"}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {isAppointmentFormOpen && (
+        <div className="patients-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeAppointmentForm(); }}>
+          <section className="patients-form-card appointment-form-card" role="dialog" aria-modal="true" aria-labelledby="appointment-form-title">
+            <button className="patients-form-close" type="button" aria-label="Fermer" onClick={closeAppointmentForm}><X size={18} /></button>
+            <span className="eyebrow">AGENDA</span>
+            <h2 id="appointment-form-title">Nouveau rendez-vous.</h2>
+            <p>Le rendez-vous sera enregistré dans l’agenda de votre établissement.</p>
+            <form className="signup-form" onSubmit={saveAppointment}>
+              <div className="payment-select-label">
+                <span id="appointment-patient-label">Patient</span>
+                <div className="payment-select-wrap">
+                  <PatientSelect
+                    options={patientOptions}
+                    value={appointmentForm.patient_id}
+                    onChange={(patientId) => setAppointmentForm((current) => ({ ...current, patient_id: patientId }))}
+                    labelId="appointment-patient-label"
+                  />
+                </div>
+              </div>
+              <label className="payment-select-label">Motif du rendez-vous
+                <div className="payment-select-wrap">
+                  <select value={appointmentForm.reason} onChange={(event) => setAppointmentForm({ ...appointmentForm, reason: event.target.value })} required>
+                    {services.map((service) => <option key={service.label} value={service.label}>{service.icon} {service.label}</option>)}
+                  </select>
+                  <ChevronDown size={15} className="payment-select-icon" />
+                </div>
+              </label>
+              <div className="payment-fields">
+                <label>Date et heure de début<input type="datetime-local" value={appointmentForm.starts_at} onChange={(event) => setAppointmentForm({ ...appointmentForm, starts_at: event.target.value })} required /></label>
+                <label>Date et heure de fin<input type="datetime-local" value={appointmentForm.ends_at} onChange={(event) => setAppointmentForm({ ...appointmentForm, ends_at: event.target.value })} required /></label>
+              </div>
+              <label>Praticien<input autoComplete="name" value={appointmentForm.practitioner} onChange={(event) => setAppointmentForm({ ...appointmentForm, practitioner: event.target.value })} maxLength={150} placeholder="Nom du médecin" required /></label>
+              <label>Notes (facultatif)<textarea className="appointment-notes" value={appointmentForm.notes} onChange={(event) => setAppointmentForm({ ...appointmentForm, notes: event.target.value })} maxLength={1000} rows={3} placeholder="Informations utiles à l’accueil ou au praticien" /></label>
+              {appointmentError && <p className="patients-error" role="alert">{appointmentError}</p>}
+              <div className="payments-form-hint"><CalendarDays size={15} /><span>Un créneau qui chevauche un rendez-vous programmé du même praticien ou du même patient sera refusé.</span></div>
+              <div className="patients-form-actions">
+                <button className="patients-cancel" type="button" disabled={isAppointmentSaving} onClick={closeAppointmentForm}>Annuler</button>
+                <button className="button button--primary" type="submit" disabled={isAppointmentSaving}>{isAppointmentSaving ? "Enregistrement…" : "Enregistrer le rendez-vous"}</button>
               </div>
             </form>
           </section>

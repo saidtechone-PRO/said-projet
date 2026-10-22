@@ -348,4 +348,67 @@ create policy "Users can create their clinical notes"
 
 grant select, insert on public.clinical_notes to authenticated;
 
+create table if not exists public.appointments (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  patient_id uuid not null references public.patients (id) on delete cascade,
+  patient_name text not null check (length(trim(patient_name)) > 0),
+  reason text not null check (length(trim(reason)) > 0),
+  practitioner text not null check (length(trim(practitioner)) > 0),
+  starts_at timestamptz not null,
+  ends_at timestamptz not null,
+  notes text not null default '',
+  status text not null default 'scheduled' check (status in ('scheduled', 'completed', 'cancelled', 'no_show')),
+  created_at timestamptz not null default now(),
+  constraint appointments_time_range check (ends_at > starts_at)
+);
+
+alter table public.appointments drop constraint if exists appointments_time_range;
+alter table public.appointments add constraint appointments_time_range
+  check (ends_at > starts_at);
+alter table public.appointments drop constraint if exists appointments_status_check;
+alter table public.appointments add constraint appointments_status_check
+  check (status in ('scheduled', 'completed', 'cancelled', 'no_show'));
+
+create index if not exists appointments_user_starts_at_idx
+  on public.appointments (user_id, starts_at);
+
+alter table public.appointments enable row level security;
+
+drop policy if exists "Users can read their appointments" on public.appointments;
+drop policy if exists "Users can create their appointments" on public.appointments;
+drop policy if exists "Users can update their appointments" on public.appointments;
+
+create policy "Users can read their appointments"
+  on public.appointments for select
+  to authenticated
+  using (auth.uid() = user_id);
+
+create policy "Users can create their appointments"
+  on public.appointments for insert
+  to authenticated
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from public.patients
+      where patients.id = appointments.patient_id
+        and patients.user_id = auth.uid()
+    )
+  );
+
+create policy "Users can update their appointments"
+  on public.appointments for update
+  to authenticated
+  using (auth.uid() = user_id)
+  with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from public.patients
+      where patients.id = appointments.patient_id
+        and patients.user_id = auth.uid()
+    )
+  );
+
+grant select, insert, update on public.appointments to authenticated;
+
 notify pgrst, 'reload schema';
