@@ -1599,18 +1599,19 @@ h1, h2, h3, p { margin-top: 0; }
 .birth-date-calendar__header > button { display: grid; width: 32px; height: 32px; flex: 0 0 32px; place-items: center; border: 1px solid rgba(196,211,235,.1); border-radius: 8px; color: #b9c6d4; background: rgba(255,255,255,.035); cursor: pointer; }
 .birth-date-calendar__header > button:hover:not(:disabled) { border-color: rgba(143,226,212,.35); color: #91e0d2; background: rgba(75,186,169,.1); }
 .birth-date-calendar__header > button:disabled { cursor: default; opacity: .35; }
-.birth-date-calendar__selectors { display: flex; min-width: 0; gap: 5px; }
-.birth-month-select { position: relative; z-index: 1; min-width: 0; flex: 1; }
-.birth-month-select--open { z-index: 12; }
-.birth-month-select__trigger { display: flex; width: 100%; height: 32px; align-items: center; justify-content: space-between; gap: 5px; padding: 0 8px; border: 1px solid rgba(196,211,235,.1); border-radius: 7px; color: #e6edf1; background: #202c3a; cursor: pointer; font: inherit; font-size: 12px; text-align: left; text-transform: capitalize; transition: border-color .2s ease,background .2s ease,box-shadow .2s ease; }
-.birth-month-select__trigger:hover, .birth-month-select--open .birth-month-select__trigger { border-color: rgba(109,224,207,.58); background: #263747; }
-.birth-month-select__trigger:focus-visible { border-color: rgba(109,224,207,.76); outline: none; box-shadow: 0 0 0 3px rgba(79,202,185,.12); }
-.birth-month-select__trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.birth-month-select__menu { min-width: 150px; }
-.birth-month-select .patient-select__option { min-height: 42px; text-transform: capitalize; }
-.birth-date-calendar__selectors select { height: 32px; padding: 0 7px; border: 1px solid rgba(196,211,235,.1); border-radius: 7px; color: #e6edf1; background: #202c3a; font: inherit; font-size: 12px; text-transform: capitalize; }
-.birth-date-calendar__selectors select:focus-visible { border-color: rgba(109,224,207,.65); outline: none; }
-.birth-date-calendar__selectors select option { color: #e6edf1; background: #202c3a; }
+.birth-date-calendar__selectors { display: flex; min-width: 0; flex: 1; gap: 5px; }
+.birth-date-calendar-select { position: relative; z-index: 1; min-width: 0; }
+.birth-date-calendar-select--open { z-index: 12; }
+.birth-date-calendar-select--month { flex: 1; }
+.birth-date-calendar-select--year { flex: 0 0 76px; }
+.birth-date-calendar-select__trigger { display: flex; width: 100%; height: 32px; align-items: center; justify-content: space-between; gap: 5px; padding: 0 8px; border: 1px solid rgba(196,211,235,.1); border-radius: 7px; color: #e6edf1; background: #202c3a; cursor: pointer; font: inherit; font-size: 12px; text-align: left; transition: border-color .2s ease,background .2s ease,box-shadow .2s ease; }
+.birth-date-calendar-select__trigger:hover, .birth-date-calendar-select--open .birth-date-calendar-select__trigger { border-color: rgba(109,224,207,.58); background: #263747; }
+.birth-date-calendar-select__trigger:focus-visible { border-color: rgba(109,224,207,.76); outline: none; box-shadow: 0 0 0 3px rgba(79,202,185,.12); }
+.birth-date-calendar-select__trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.birth-date-calendar-select--month .birth-date-calendar-select__trigger, .birth-date-calendar-select--month .patient-select__option { text-transform: capitalize; }
+.birth-date-calendar-select__menu { min-width: 150px; }
+.birth-date-calendar-select--year .birth-date-calendar-select__menu { right: 0; left: auto; width: 132px; min-width: 132px; }
+.birth-date-calendar-select .patient-select__option { min-height: 42px; }
 .birth-date-calendar__grid { display: grid; grid-template-columns: repeat(7,minmax(0,1fr)); gap: 3px; margin-top: 5px; }
 .birth-date-calendar__weekdays { margin-top: 13px; }
 .birth-date-calendar__weekdays span { display: grid; height: 25px; place-items: center; color: #8e9bac; font-size: 10px; font-weight: 600; text-transform: capitalize; }
